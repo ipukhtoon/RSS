@@ -18,7 +18,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install dependencies
         run: npm install
@@ -43,7 +43,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -55,7 +55,7 @@ jobs:
         run: |
           npm install
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
-          npm install @capacitor-community/barcode-scanner
+          npm install @capacitor-mlkit/barcode-scanning
 
       - name: Prepare Web Files
         run: |
@@ -72,8 +72,7 @@ jobs:
 
       - name: Configure Android Camera Permission
         run: |
-          MANIFEST="android/app/src/main/AndroidManifest.xml"
-          sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA"\/>\n    <application/' "$MANIFEST"
+          sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
 
       - name: Build Android APK
         run: |
@@ -81,8 +80,4 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Ronyal-Super-Store-Android-APK
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Upload
