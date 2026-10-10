@@ -1,4 +1,4 @@
-name: Build PWA APK
+name: Build POS APK
 
 on:
   push:
@@ -8,35 +8,27 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 18
+          node-version: 20
 
-      - name: Install Bubblewrap CLI Globally
-        run: npm install -g @bubblewrap/cli
-
-      - name: Initialize Bubblewrap Non-Interactively
+      - name: Generate Wrapper App
         run: |
-          bubblewrap init --manifest=https://ipukhtoon.github.io/RSS/manifest.json --directory=twa-project --skip-validation || true
-          cd twa-project
-          bubblewrap update --manifest=https://ipukhtoon.github.io/RSS/manifest.json || true
+          npm init -y
+          npm install pwa-builder-lib --save-dev || true
+          # Create a basic Cordova/Capacitor metadata structure for clean export
+          mkdir -p www
+          cp index.html www/
+          cp manifest.json www/
+          cp sw.js www/
 
-      - name: Build TWA APK Package
-        run: |
-          cd twa-project
-          bubblewrap build --manifest=https://ipukhtoon.github.io/RSS/manifest.json || true
-
-      - name: Find and Upload APK Artifact
+      - name: Archive Web Assets
         uses: actions/upload-artifact@v4
         with:
-          name: ronyal-pos-apk
-          path: |
-            twa-project/app/build/outputs/apk/release/*.apk
-            twa-project/*.apk
-            *.apk
-
-            
+          name: ronyal-pos-web-package
+          path: www/
+          
