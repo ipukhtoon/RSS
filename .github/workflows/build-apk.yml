@@ -1,0 +1,35 @@
+name: Build PWA APK
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Install Bubblewrap CLI
+        run: npm install -g @bubblewrap/cli
+
+      - name: Build Android App
+        run: |
+          bubblewrap init --manifest=https://ipukhtoon.github.io/RSS/manifest.json --directory=android-app || true
+          cd android-app
+          bubblewrap build || true
+
+      - name: Upload APK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ronyal-pos-apk
+          path: |
+            android-app/app/build/outputs/apk/release/*.apk
+            android-app/*.apk
+            
