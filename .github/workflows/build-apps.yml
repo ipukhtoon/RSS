@@ -1,80 +1,82 @@
 name: Build Ronyal Super Store
 
 on:
-workflow_dispatch:
-push:
-branches:
-- main
+  workflow_dispatch:
+  push:
+    branches:
+      - main
 
 jobs:
-windows:
-name: Build Windows Installer
-runs-on: windows-latest
-steps:
-- name: Checkout
-uses: actions/checkout@v4
+  windows:
+    name: Build Windows Installer
+    runs-on: windows-latest
 
-  - name: Setup Node
-    uses: actions/setup-node@v4
-    with:
-      node-version: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Install dependencies
-    run: npm install
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-  - name: Build installer
-    run: npm run build:windows
+      - name: Install dependencies
+        run: npm install
 
-  - name: Upload installer
-    uses: actions/upload-artifact@v4
-    with:
-      name: Ronyal-Super-Store-Windows
-      path: dist/*.exe
+      - name: Build Windows Installer
+        run: npm run build:windows
 
-android:
-name: Build Android APK
-runs-on: ubuntu-latest
-steps:
-- name: Checkout
-uses: actions/checkout@v4
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ronyal-Super-Store-Windows
+          path: dist/*.exe
 
-  - name: Setup Node
-    uses: actions/setup-node@v4
-    with:
-      node-version: 20
+  android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
 
-  - name: Setup Java
-    uses: actions/setup-java@v4
-    with:
-      distribution: temurin
-      java-version: 21
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
 
-  - name: Install dependencies
-    run: |
-      npm install
-      npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-  - name: Prepare web files
-    run: |
-      mkdir -p www
-      cp index.html www/
-      cp manifest.json www/
-      if [ -f sw.js ]; then cp sw.js www/; fi
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
 
-  - name: Configure Android
-    run: |
-      echo '{"appId":"com.ronyal.superstore","appName":"Ronyal Super Store","webDir":"www"}' > capacitor.config.json
-      npx cap add android
-      npx cap sync android
+      - name: Install dependencies
+        run: |
+          npm install
+          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
 
-  - name: Build APK
-    run: |
-      cd android
-      chmod +x gradlew
-      ./gradlew assembleDebug
+      - name: Prepare Web Files
+        run: |
+          mkdir -p www
+          cp index.html www/
+          cp manifest.json www/
+          if [ -f sw.js ]; then cp sw.js www/; fi
 
-  - name: Upload APK
-    uses: actions/upload-artifact@v4
-    with:
-      name: Ronyal-Super-Store-Android-APK
-      path: android/app/build/outputs/apk/debug/app-debug.apk
+      - name: Configure Capacitor
+        run: |
+          echo '{"appId":"com.ronyal.superstore","appName":"Ronyal Super Store","webDir":"www"}' > capacitor.config.json
+          npx cap add android
+          npx cap sync android
+
+      - name: Build Android APK
+        run: |
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Ronyal-Super-Store-Android-APK
+          path: android/app/build/outputs/apk/debug/app-debug.apk
