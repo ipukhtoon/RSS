@@ -1,0 +1,16 @@
+{
+  "name": "Ronyal Super Store POS",
+  "short_name": "Ronyal POS",
+  "description": "Offline-first point of sale for Ronyal Super Store",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#17100e",
+  "theme_color": "#24110d",
+  "icons": [
+    {
+      "src": "https://raw.githubusercontent.com/ipukhtoon/RSS/main/icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
