@@ -16,20 +16,27 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install Bubblewrap CLI
+      - name: Install Bubblewrap CLI Globally
         run: npm install -g @bubblewrap/cli
 
-      - name: Build Android App
+      - name: Initialize Bubblewrap Non-Interactively
         run: |
-          bubblewrap init --manifest=https://ipukhtoon.github.io/RSS/manifest.json --directory=android-app || true
-          cd android-app
-          bubblewrap build || true
+          bubblewrap init --manifest=https://ipukhtoon.github.io/RSS/manifest.json --directory=twa-project --skip-validation || true
+          cd twa-project
+          bubblewrap update --manifest=https://ipukhtoon.github.io/RSS/manifest.json || true
 
-      - name: Upload APK Artifact
+      - name: Build TWA APK Package
+        run: |
+          cd twa-project
+          bubblewrap build --manifest=https://ipukhtoon.github.io/RSS/manifest.json || true
+
+      - name: Find and Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: ronyal-pos-apk
           path: |
-            android-app/app/build/outputs/apk/release/*.apk
-            android-app/*.apk
+            twa-project/app/build/outputs/apk/release/*.apk
+            twa-project/*.apk
+            *.apk
+
             
