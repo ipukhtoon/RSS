@@ -51,7 +51,7 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Install dependencies
+      - name: Install Capacitor 7 dependencies
         run: |
           npm install
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
@@ -66,7 +66,7 @@ jobs:
           cp manifest.json www/
           if [ -f sw.js ]; then cp sw.js www/; fi
 
-      - name: Bundle Printer Plugin Bridge
+      - name: Bundle Printer Bridge
         run: |
           cat > www/printer-bridge.js <<'EOF'
           import { Printer } from '@capgo/capacitor-printer';
@@ -77,7 +77,11 @@ jobs:
             }
           };
           EOF
-          npx esbuild www/printer-bridge.js --bundle --format=iife --outfile=www/printer-bridge.bundle.js
+
+          npx esbuild www/printer-bridge.js \
+            --bundle \
+            --format=iife \
+            --outfile=www/printer-bridge.bundle.js
 
       - name: Configure Capacitor
         run: |
