@@ -51,37 +51,63 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Install Capacitor 7 dependencies
+      - name: Install dependencies
         run: |
           npm install
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
           npm install @capacitor-mlkit/barcode-scanning@7
           npm install @capgo/capacitor-printer@7
-          npm install esbuild
+          npm install --no-save esbuild
 
-      - name: Prepare Web Files
+      - name: Prepare Web Files and Embed Printer Bridge
         run: |
           mkdir -p www
           cp index.html www/
           cp manifest.json www/
           if [ -f sw.js ]; then cp sw.js www/; fi
 
-      - name: Bundle Printer Bridge
-        run: |
-          cat > www/printer-bridge.js <<'EOF'
+          cat > printer-bridge-entry.js <<'EOF'
           import { Printer } from '@capgo/capacitor-printer';
 
           window.RonyalPrinter = {
-            printWebView: async (options = {}) => {
-              return await Printer.printWebView(options);
-            }
+            printWebView: (options = {}) => Printer.printWebView(options)
           };
           EOF
 
-          npx esbuild www/printer-bridge.js \
+          npx esbuild printer-bridge-entry.js \
             --bundle \
+            --platform=browser \
             --format=iife \
-            --outfile=www/printer-bridge.bundle.js
+            --outfile=printer-bridge.bundle.js
+
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('www/index.html')
+          s = p.read_text()
+          bundle = Path('printer-bridge.bundle.js').read_text()
+
+          marker = "<script>\n(()=>{'use strict';"
+
+          if marker not in s:
+              raise SystemExit(
+                  'Could not find main app script marker in index.html'
+              )
+
+          replacement = (
+              '<script>\n'
+              + bundle
+              + '\n</script>\n<script>\n(()=>{\'use strict\';'
+          )
+
+          p.write_text(s.replace(marker, replacement, 1))
+          PY
+
+      - name: Verify printer bridge was embedded
+        run: |
+          grep -q "window.RonyalPrinter" www/index.html
+          grep -q "printWebView" www/index.html
+          echo "Printer bridge found in Android web assets."
 
       - name: Configure Capacitor
         run: |
