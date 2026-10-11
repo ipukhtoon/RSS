@@ -56,6 +56,7 @@ jobs:
           npm install
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
           npm install @capacitor-mlkit/barcode-scanning@7
+          npm install @capgo/capacitor-printer@7
 
       - name: Prepare Web Files
         run: |
