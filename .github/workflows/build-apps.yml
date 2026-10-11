@@ -46,33 +46,47 @@ jobs:
           node-version: 22
 
       - name: Setup Java
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
 
       - name: Install dependencies
         run: |
-          npm install
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
           npm install @capacitor-mlkit/barcode-scanning@7
-          npm install @capgo/capacitor-printer@7
           npm install --no-save esbuild
+          npm uninstall @capgo/capacitor-printer || true
 
-      - name: Prepare Web Files and Embed Printer Bridge
+      - name: Prepare Android web assets
+        shell: bash
         run: |
-          mkdir -p www
-          cp index.html www/
-          cp manifest.json www/
-          if [ -f sw.js ]; then cp sw.js www/; fi
+          set -euo pipefail
 
-          cat > printer-bridge-entry.js <<'EOF'
-          import { Printer } from '@capgo/capacitor-printer';
+          mkdir -p www
+          cp index.html www/index.html
+
+          if [ -f manifest.json ]; then
+            cp manifest.json www/manifest.json
+          fi
+
+          if [ -f sw.js ]; then
+            cp sw.js www/sw.js
+          fi
+
+          cat > printer-bridge-entry.js <<'JS'
+          import { registerPlugin } from '@capacitor/core';
+
+          const NativePrint = registerPlugin('RonyalPrint');
 
           window.RonyalPrinter = {
-            printWebView: (options = {}) => Printer.printWebView(options)
+            printWebView: (options = {}) =>
+              NativePrint.printWebView(options),
+
+            getPrintStatus: () =>
+              NativePrint.getPrintStatus()
           };
-          EOF
+          JS
 
           npx esbuild printer-bridge-entry.js \
             --bundle \
@@ -82,42 +96,245 @@ jobs:
 
           python - <<'PY'
           from pathlib import Path
+          import re
 
-          p = Path('www/index.html')
-          s = p.read_text()
-          bundle = Path('printer-bridge.bundle.js').read_text()
+          path = Path("www/index.html")
+          html = path.read_text(encoding="utf-8")
+          bundle = Path("printer-bridge.bundle.js").read_text(encoding="utf-8")
 
-          marker = "<script>\n(()=>{'use strict';"
+          if re.search(r"</body\s*>", html, flags=re.I) is None:
+              raise SystemExit("ERROR: index.html has no closing body tag.")
 
-          if marker not in s:
-              raise SystemExit(
-                  'Could not find main app script marker in index.html'
-              )
-
-          replacement = (
-              '<script>\n'
-              + bundle
-              + '\n</script>\n<script>\n(()=>{\'use strict\';'
+          html, count = re.subn(
+              r"</body\s*>",
+              lambda m: '<script>\n' + bundle + '\n</script>\n' + m.group(0),
+              html,
+              count=1,
+              flags=re.I
           )
 
-          p.write_text(s.replace(marker, replacement, 1))
+          if count != 1:
+              raise SystemExit("ERROR: Could not inject printer bridge.")
+
+          path.write_text(html, encoding="utf-8")
+          print("Printer bridge embedded in www/index.html")
           PY
 
-      - name: Verify printer bridge was embedded
-        run: |
-          grep -q "window.RonyalPrinter" www/index.html
-          grep -q "printWebView" www/index.html
-          echo "Printer bridge found in Android web assets."
+          cat > capacitor.config.json <<'JSON'
+          {
+            "appId": "com.ronyal.superstore",
+            "appName": "Ronyal Super Store",
+            "webDir": "www",
+            "android": {
+              "allowMixedContent": true
+            }
+          }
+          JSON
 
-      - name: Configure Capacitor
-        run: |
-          echo '{"appId":"com.ronyal.superstore","appName":"Ronyal Super Store","webDir":"www","android":{"allowMixedContent":true}}' > capacitor.config.json
           npx cap add android
-          npx cap sync android
+
+      - name: Register native Android PrintManager plugin
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          MAIN_ACTIVITY="$(find android/app/src/main/java -name MainActivity.java -print -quit)"
+
+          if [ -z "$MAIN_ACTIVITY" ]; then
+            echo "ERROR: MainActivity.java not found."
+            exit 1
+          fi
+
+          PACKAGE="$(sed -n 's/^package[[:space:]]\+\([^;]*\);.*/\1/p' "$MAIN_ACTIVITY" | head -n 1)"
+
+          if [ -z "$PACKAGE" ]; then
+            echo "ERROR: Could not determine Android package."
+            exit 1
+          fi
+
+          JAVA_DIR="$(dirname "$MAIN_ACTIVITY")"
+
+          cat > "$JAVA_DIR/RonyalPrintPlugin.java" <<JAVA
+          package $PACKAGE;
+
+          import android.app.Activity;
+          import android.content.Context;
+          import android.content.pm.PackageManager;
+          import android.os.Build;
+          import android.print.PrintAttributes;
+          import android.print.PrintDocumentAdapter;
+          import android.print.PrintJob;
+          import android.print.PrintManager;
+          import android.webkit.WebView;
+
+          import com.getcapacitor.JSObject;
+          import com.getcapacitor.Plugin;
+          import com.getcapacitor.PluginCall;
+          import com.getcapacitor.PluginMethod;
+          import com.getcapacitor.annotation.CapacitorPlugin;
+
+          @CapacitorPlugin(name = "RonyalPrint")
+          public class RonyalPrintPlugin extends Plugin {
+
+              @PluginMethod
+              public void getPrintStatus(PluginCall call) {
+                  Activity activity = getActivity();
+                  JSObject result = new JSObject();
+
+                  result.put("apiLevel", Build.VERSION.SDK_INT);
+                  result.put(
+                      "activityAvailable",
+                      activity != null && !activity.isFinishing()
+                  );
+
+                  if (activity == null || activity.isFinishing()) {
+                      result.put("printingFeature", false);
+                      result.put("printManagerAvailable", false);
+                      call.resolve(result);
+                      return;
+                  }
+
+                  boolean feature = activity.getPackageManager()
+                      .hasSystemFeature(PackageManager.FEATURE_PRINTING);
+
+                  Object service =
+                      activity.getSystemService(Context.PRINT_SERVICE);
+
+                  result.put("printingFeature", feature);
+                  result.put("printManagerAvailable", service instanceof PrintManager);
+
+                  call.resolve(result);
+              }
+
+              @PluginMethod
+              public void printWebView(PluginCall call) {
+                  final Activity activity = getActivity();
+                  final String jobName = call.getString(
+                      "name",
+                      "Ronyal Super Store Receipt"
+                  );
+
+                  if (activity == null || activity.isFinishing()) {
+                      call.reject("Android Activity is unavailable.");
+                      return;
+                  }
+
+                  activity.runOnUiThread(() -> {
+                      try {
+                          if (!activity.getPackageManager()
+                                  .hasSystemFeature(PackageManager.FEATURE_PRINTING)) {
+                              call.reject(
+                                  "Android reports that the system printing feature is unavailable."
+                              );
+                              return;
+                          }
+
+                          Object service =
+                              activity.getSystemService(Context.PRINT_SERVICE);
+
+                          if (!(service instanceof PrintManager)) {
+                              call.reject("Android PrintManager is unavailable.");
+                              return;
+                          }
+
+                          WebView webView = getBridge() == null
+                              ? null
+                              : getBridge().getWebView();
+
+                          if (webView == null) {
+                              call.reject("POS WebView is unavailable.");
+                              return;
+                          }
+
+                          PrintDocumentAdapter adapter =
+                              Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
+                                  ? webView.createPrintDocumentAdapter(jobName)
+                                  : webView.createPrintDocumentAdapter();
+
+                          PrintJob job = ((PrintManager) service).print(
+                              jobName,
+                              adapter,
+                              new PrintAttributes.Builder().build()
+                          );
+
+                          if (job == null) {
+                              call.reject(
+                                  "Android did not return a print job."
+                              );
+                              return;
+                          }
+
+                          JSObject result = new JSObject();
+                          result.put("jobName", jobName);
+                          result.put(
+                              "jobId",
+                              job.getId() == null
+                                  ? ""
+                                  : job.getId().toString()
+                          );
+
+                          call.resolve(result);
+
+                      } catch (Exception e) {
+                          String message = e.getMessage();
+
+                          if (message == null || message.trim().isEmpty()) {
+                              message = e.getClass().getSimpleName();
+                          }
+
+                          call.reject(
+                              "Android PrintManager error: " + message
+                          );
+                      }
+                  });
+              }
+          }
+          JAVA
+
+          cat > "$MAIN_ACTIVITY" <<JAVA
+          package $PACKAGE;
+
+          import android.os.Bundle;
+          import com.getcapacitor.BridgeActivity;
+
+          public class MainActivity extends BridgeActivity {
+              @Override
+              public void onCreate(Bundle savedInstanceState) {
+                  registerPlugin(RonyalPrintPlugin.class);
+                  super.onCreate(savedInstanceState);
+              }
+          }
+          JAVA
+
+          grep -q 'window.RonyalPrinter' www/index.html
+          grep -q 'RonyalPrint' www/index.html
+          test -s "$JAVA_DIR/RonyalPrintPlugin.java"
+
+          echo "Native Android PrintManager plugin created."
+
+      - name: Sync Capacitor
+        run: npx cap sync android
 
       - name: Configure Android Camera Permission
+        shell: bash
         run: |
-          sed -i 's/<application/<uses-permission android:name="android.permission.CAMERA"\/>\n    <application/' android/app/src/main/AndroidManifest.xml
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path("android/app/src/main/AndroidManifest.xml")
+          s = p.read_text(encoding="utf-8")
+
+          permission = '<uses-permission android:name="android.permission.CAMERA" />'
+
+          if permission not in s:
+              s = s.replace(
+                  "<application",
+                  permission + "\n    <application",
+                  1
+              )
+
+          p.write_text(s, encoding="utf-8")
+          PY
 
       - name: Build Android APK
         run: |
