@@ -3,8 +3,7 @@ name: Build Ronyal Super Store
 on:
   workflow_dispatch:
   push:
-    branches:
-      - main
+    branches: [main]
 
 jobs:
   windows:
@@ -12,11 +11,9 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
@@ -37,21 +34,18 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
+      - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 21
 
-      - name: Install dependencies
+      - name: Install Capacitor dependencies
         run: |
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
           npm install @capacitor-mlkit/barcode-scanning@7
@@ -63,12 +57,14 @@ jobs:
         run: |
           set -euo pipefail
 
-          mkdir -p www
-          cp index.html www/index.html
+          test -f index.html
+          test -f manifest.json
+          test -f native/android/RonyalPrintPlugin.java
 
-          if [ -f manifest.json ]; then
-            cp manifest.json www/manifest.json
-          fi
+          mkdir -p www
+
+          cp index.html www/index.html
+          cp manifest.json www/manifest.json
 
           if [ -f sw.js ]; then
             cp sw.js www/sw.js
@@ -77,14 +73,22 @@ jobs:
           cat > printer-bridge-entry.js <<'JS'
           import { registerPlugin } from '@capacitor/core';
 
-          const NativePrint = registerPlugin('RonyalPrint');
+          const Native = registerPlugin('RonyalPrint');
 
           window.RonyalPrinter = {
             printWebView: (options = {}) =>
-              NativePrint.printWebView(options),
+              Native.printWebView(options),
 
             getPrintStatus: () =>
-              NativePrint.getPrintStatus()
+              Native.getPrintStatus()
+          };
+
+          window.RonyalFiles = {
+            saveFile: (options = {}) =>
+              Native.saveFile(options),
+
+            pickFile: (options = {}) =>
+              Native.pickFile(options)
           };
           JS
 
@@ -98,26 +102,38 @@ jobs:
           from pathlib import Path
           import re
 
-          path = Path("www/index.html")
-          html = path.read_text(encoding="utf-8")
-          bundle = Path("printer-bridge.bundle.js").read_text(encoding="utf-8")
+          html_path = Path("www/index.html")
+          html = html_path.read_text(encoding="utf-8")
+          bridge = Path("printer-bridge.bundle.js").read_text(encoding="utf-8")
 
-          if re.search(r"</body\s*>", html, flags=re.I) is None:
-              raise SystemExit("ERROR: index.html has no closing body tag.")
+          if "window.RonyalFiles" not in html:
+              raise SystemExit(
+                  "The HTML does not contain the Android file bridge. "
+                  "Use the updated POS HTML."
+              )
+
+          if "window.RonyalPrinter" not in html:
+              raise SystemExit(
+                  "The HTML does not contain the Android printer bridge."
+              )
 
           html, count = re.subn(
               r"</body\s*>",
-              lambda m: '<script>\n' + bundle + '\n</script>\n' + m.group(0),
+              lambda match: (
+                  "<script>\n"
+                  + bridge
+                  + "\n</script>\n"
+                  + match.group(0)
+              ),
               html,
               count=1,
-              flags=re.I
+              flags=re.IGNORECASE
           )
 
           if count != 1:
-              raise SystemExit("ERROR: Could not inject printer bridge.")
+              raise SystemExit("Could not inject the native Android bridge.")
 
-          path.write_text(html, encoding="utf-8")
-          print("Printer bridge embedded in www/index.html")
+          html_path.write_text(html, encoding="utf-8")
           PY
 
           cat > capacitor.config.json <<'JSON'
@@ -133,163 +149,33 @@ jobs:
 
           npx cap add android
 
-      - name: Register native Android PrintManager plugin
+      - name: Register native Android plugin
         shell: bash
         run: |
           set -euo pipefail
 
-          MAIN_ACTIVITY="$(find android/app/src/main/java -name MainActivity.java -print -quit)"
+          MAIN_ACTIVITY="$(find android/app/src/main/java \
+            -name MainActivity.java -print -quit)"
 
-          if [ -z "$MAIN_ACTIVITY" ]; then
-            echo "ERROR: MainActivity.java not found."
+          test -n "$MAIN_ACTIVITY" || {
+            echo "MainActivity.java was not found."
             exit 1
-          fi
+          }
 
-          PACKAGE="$(sed -n 's/^package[[:space:]]\+\([^;]*\);.*/\1/p' "$MAIN_ACTIVITY" | head -n 1)"
+          PACKAGE="$(sed -n \
+            's/^package[[:space:]]\+\([^;]*\);.*/\1/p' \
+            "$MAIN_ACTIVITY" | head -n 1)"
 
-          if [ -z "$PACKAGE" ]; then
-            echo "ERROR: Could not determine Android package."
+          test -n "$PACKAGE" || {
+            echo "Could not determine the Android package."
             exit 1
-          fi
+          }
 
           JAVA_DIR="$(dirname "$MAIN_ACTIVITY")"
 
-          cat > "$JAVA_DIR/RonyalPrintPlugin.java" <<JAVA
-          package $PACKAGE;
-
-          import android.app.Activity;
-          import android.content.Context;
-          import android.content.pm.PackageManager;
-          import android.os.Build;
-          import android.print.PrintAttributes;
-          import android.print.PrintDocumentAdapter;
-          import android.print.PrintJob;
-          import android.print.PrintManager;
-          import android.webkit.WebView;
-
-          import com.getcapacitor.JSObject;
-          import com.getcapacitor.Plugin;
-          import com.getcapacitor.PluginCall;
-          import com.getcapacitor.PluginMethod;
-          import com.getcapacitor.annotation.CapacitorPlugin;
-
-          @CapacitorPlugin(name = "RonyalPrint")
-          public class RonyalPrintPlugin extends Plugin {
-
-              @PluginMethod
-              public void getPrintStatus(PluginCall call) {
-                  Activity activity = getActivity();
-                  JSObject result = new JSObject();
-
-                  result.put("apiLevel", Build.VERSION.SDK_INT);
-                  result.put(
-                      "activityAvailable",
-                      activity != null && !activity.isFinishing()
-                  );
-
-                  if (activity == null || activity.isFinishing()) {
-                      result.put("printingFeature", false);
-                      result.put("printManagerAvailable", false);
-                      call.resolve(result);
-                      return;
-                  }
-
-                  boolean feature = activity.getPackageManager()
-                      .hasSystemFeature(PackageManager.FEATURE_PRINTING);
-
-                  Object service =
-                      activity.getSystemService(Context.PRINT_SERVICE);
-
-                  result.put("printingFeature", feature);
-                  result.put("printManagerAvailable", service instanceof PrintManager);
-
-                  call.resolve(result);
-              }
-
-              @PluginMethod
-              public void printWebView(PluginCall call) {
-                  final Activity activity = getActivity();
-                  final String jobName = call.getString(
-                      "name",
-                      "Ronyal Super Store Receipt"
-                  );
-
-                  if (activity == null || activity.isFinishing()) {
-                      call.reject("Android Activity is unavailable.");
-                      return;
-                  }
-
-                  activity.runOnUiThread(() -> {
-                      try {
-                          if (!activity.getPackageManager()
-                                  .hasSystemFeature(PackageManager.FEATURE_PRINTING)) {
-                              call.reject(
-                                  "Android reports that the system printing feature is unavailable."
-                              );
-                              return;
-                          }
-
-                          Object service =
-                              activity.getSystemService(Context.PRINT_SERVICE);
-
-                          if (!(service instanceof PrintManager)) {
-                              call.reject("Android PrintManager is unavailable.");
-                              return;
-                          }
-
-                          WebView webView = getBridge() == null
-                              ? null
-                              : getBridge().getWebView();
-
-                          if (webView == null) {
-                              call.reject("POS WebView is unavailable.");
-                              return;
-                          }
-
-                          PrintDocumentAdapter adapter =
-                              Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP
-                                  ? webView.createPrintDocumentAdapter(jobName)
-                                  : webView.createPrintDocumentAdapter();
-
-                          PrintJob job = ((PrintManager) service).print(
-                              jobName,
-                              adapter,
-                              new PrintAttributes.Builder().build()
-                          );
-
-                          if (job == null) {
-                              call.reject(
-                                  "Android did not return a print job."
-                              );
-                              return;
-                          }
-
-                          JSObject result = new JSObject();
-                          result.put("jobName", jobName);
-                          result.put(
-                              "jobId",
-                              job.getId() == null
-                                  ? ""
-                                  : job.getId().toString()
-                          );
-
-                          call.resolve(result);
-
-                      } catch (Exception e) {
-                          String message = e.getMessage();
-
-                          if (message == null || message.trim().isEmpty()) {
-                              message = e.getClass().getSimpleName();
-                          }
-
-                          call.reject(
-                              "Android PrintManager error: " + message
-                          );
-                      }
-                  });
-              }
-          }
-          JAVA
+          sed "s/^package PACKAGE_NAME_PLACEHOLDER;/package $PACKAGE;/" \
+            native/android/RonyalPrintPlugin.java \
+            > "$JAVA_DIR/RonyalPrintPlugin.java"
 
           cat > "$MAIN_ACTIVITY" <<JAVA
           package $PACKAGE;
@@ -306,38 +192,12 @@ jobs:
           }
           JAVA
 
-          grep -q 'window.RonyalPrinter' www/index.html
-          grep -q 'RonyalPrint' www/index.html
+          grep -q 'RonyalPrintPlugin' "$MAIN_ACTIVITY"
           test -s "$JAVA_DIR/RonyalPrintPlugin.java"
 
-          echo "Native Android PrintManager plugin created."
-
-      - name: Sync Capacitor
-        run: npx cap sync android
-
-      - name: Configure Android Camera Permission
-        shell: bash
+      - name: Sync Capacitor and build APK
         run: |
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path("android/app/src/main/AndroidManifest.xml")
-          s = p.read_text(encoding="utf-8")
-
-          permission = '<uses-permission android:name="android.permission.CAMERA" />'
-
-          if permission not in s:
-              s = s.replace(
-                  "<application",
-                  permission + "\n    <application",
-                  1
-              )
-
-          p.write_text(s, encoding="utf-8")
-          PY
-
-      - name: Build Android APK
-        run: |
+          npx cap sync android
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
