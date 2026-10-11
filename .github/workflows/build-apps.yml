@@ -51,12 +51,13 @@ jobs:
           distribution: temurin
           java-version: 21
 
-      - name: Install Capacitor 7 dependencies
+      - name: Install dependencies
         run: |
           npm install
           npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
           npm install @capacitor-mlkit/barcode-scanning@7
           npm install @capgo/capacitor-printer@7
+          npm install esbuild
 
       - name: Prepare Web Files
         run: |
@@ -64,6 +65,19 @@ jobs:
           cp index.html www/
           cp manifest.json www/
           if [ -f sw.js ]; then cp sw.js www/; fi
+
+      - name: Bundle Printer Plugin Bridge
+        run: |
+          cat > www/printer-bridge.js <<'EOF'
+          import { Printer } from '@capgo/capacitor-printer';
+
+          window.RonyalPrinter = {
+            printWebView: async (options = {}) => {
+              return await Printer.printWebView(options);
+            }
+          };
+          EOF
+          npx esbuild www/printer-bridge.js --bundle --format=iife --outfile=www/printer-bridge.bundle.js
 
       - name: Configure Capacitor
         run: |
@@ -81,7 +95,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleDebug
 
-      - name: Upload Android Installer
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: Ronyal-Super-Store-Android-APK
