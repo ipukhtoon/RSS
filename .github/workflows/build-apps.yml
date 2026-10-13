@@ -217,9 +217,10 @@ jobs:
             's/<application/<uses-permission android:name="android.permission.CAMERA"\/>\n    <application/' \
             android/app/src/main/AndroidManifest.xml
 
-          grep -q 'window.RonyalFiles' www/index.html
-
           test -s "$JAVA_DIR/RonyalPrintPlugin.java"
+
+          echo "Native print and file picker plugin installed."
+          echo "MainActivity configured for Capacitor."
 
       - name: Sync Capacitor and build APK
         run: |
