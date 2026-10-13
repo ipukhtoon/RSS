@@ -53,7 +53,7 @@ jobs:
 
       - name: Install Capacitor dependencies
         run: |
-          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7
+          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7 @capacitor/app@7
           npm install @capacitor-mlkit/barcode-scanning@7
           npm install --no-save esbuild
           npm uninstall @capgo/capacitor-printer || true
@@ -63,8 +63,18 @@ jobs:
         run: |
           set -euo pipefail
 
+          test -f index.html || {
+            echo "ERROR: index.html is missing from the repository root."
+            exit 1
+          }
+
+          test -f manifest.json || {
+            echo "ERROR: manifest.json is missing from the repository root."
+            exit 1
+          }
+
           test -f native/android/RonyalPrintPlugin.java || {
-            echo "Missing native/android/RonyalPrintPlugin.java"
+            echo "ERROR: Native print plugin source is missing."
             exit 1
           }
 
@@ -78,6 +88,7 @@ jobs:
 
           cat > printer-bridge-entry.js <<'JS'
           import { registerPlugin } from '@capacitor/core';
+          import { App } from '@capacitor/app';
           import {
             BarcodeScanner,
             BarcodeFormat
@@ -88,7 +99,6 @@ jobs:
           window.RonyalPrinter = {
             printWebView: (options = {}) =>
               Native.printWebView(options),
-
             getPrintStatus: () =>
               Native.getPrintStatus()
           };
@@ -96,9 +106,14 @@ jobs:
           window.RonyalFiles = {
             saveFile: (options = {}) =>
               Native.saveFile(options),
-
             pickFile: (options = {}) =>
               Native.pickFile(options)
+          };
+
+          window.RonyalApp = {
+            addListener: (eventName, callback) =>
+              App.addListener(eventName, callback),
+            exitApp: () => App.exitApp()
           };
 
           window.RonyalBarcodeScanner = {
@@ -133,17 +148,19 @@ jobs:
           import re
 
           html_path = Path("www/index.html")
-          html = html_path.read_text()
-          bundle = Path("printer-bridge.bundle.js").read_text()
+          html = html_path.read_text(encoding="utf-8")
+          bundle = Path("printer-bridge.bundle.js").read_text(encoding="utf-8")
 
+          injection = (
+              "<script>\n"
+              + bundle
+              + "\n</script>\n"
+          )
+
+          # Register native bridges before the HTML's own scripts execute.
           html, count = re.subn(
-              r"</body\s*>",
-              lambda match: (
-                  "<script>\n"
-                  + bundle
-                  + "\n</script>\n"
-                  + match.group(0)
-              ),
+              r"</head\s*>",
+              lambda match: injection + match.group(0),
               html,
               count=1,
               flags=re.IGNORECASE,
@@ -151,10 +168,11 @@ jobs:
 
           if count != 1:
               raise SystemExit(
-                  "Could not inject the native bridge into index.html"
+                  "ERROR: Could not find </head> in www/index.html"
               )
 
-          html_path.write_text(html)
+          html_path.write_text(html, encoding="utf-8")
+          print("Native bridge injected into the document head.")
           PY
 
           cat > capacitor.config.json <<'JSON'
@@ -179,7 +197,7 @@ jobs:
             -name MainActivity.java -print -quit)"
 
           test -n "$MAIN_ACTIVITY" || {
-            echo "Could not locate MainActivity.java"
+            echo "ERROR: Could not locate MainActivity.java"
             exit 1
           }
 
@@ -188,7 +206,7 @@ jobs:
             "$MAIN_ACTIVITY" | head -n 1)"
 
           test -n "$PACKAGE" || {
-            echo "Could not read the Android package name"
+            echo "ERROR: Could not read the Android package name"
             exit 1
           }
 
@@ -213,18 +231,29 @@ jobs:
           }
           JAVA
 
-          sed -i \
-            's/<application/<uses-permission android:name="android.permission.CAMERA"\/>\n    <application/' \
-            android/app/src/main/AndroidManifest.xml
+          MANIFEST="android/app/src/main/AndroidManifest.xml"
+
+          if ! grep -q 'android.permission.CAMERA' "$MANIFEST"; then
+            sed -i \
+              's/<application/<uses-permission android:name="android.permission.CAMERA"\/>\n    <application/' \
+              "$MANIFEST"
+          fi
+
+          grep -q 'window.RonyalApp' www/index.html
+          grep -q 'window.RonyalBarcodeScanner' www/index.html
+          grep -q 'window.RonyalPrinter' www/index.html
+          grep -q 'window.RonyalFiles' www/index.html
 
           test -s "$JAVA_DIR/RonyalPrintPlugin.java"
 
-          echo "Native print and file picker plugin installed."
-          echo "MainActivity configured for Capacitor."
+          echo "Native plugins configured."
 
       - name: Sync Capacitor and build APK
         run: |
+          set -euo pipefail
+
           npx cap sync android
+
           cd android
           chmod +x gradlew
           ./gradlew assembleDebug
