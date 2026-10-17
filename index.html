@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><script>
+/* v77: Chrome Android "Desktop site" can retain the phone-width viewport when a responsive viewport meta tag is present. Detect that mode early and request a desktop-width layout before the POS renders. */
+(function(){
+  try {
+    const ua = navigator.userAgent || '';
+    const hints = navigator.userAgentData;
+    const touchDevice = (navigator.maxTouchPoints || 0) > 0;
+    const physicalWidth = Math.min(screen.width || window.innerWidth || 0, screen.height || window.innerHeight || 0);
+    const compactTouchScreen = touchDevice && physicalWidth > 0 && physicalWidth <= 900;
+    const desktopUA = hints ? hints.mobile === false : !/(Android|iPhone|iPad|iPod|Mobile)/i.test(ua);
+    if (compactTouchScreen && desktopUA) {
+      document.documentElement.classList.add('rss-chrome-desktop-site');
+      const viewport = document.querySelector('meta[name="viewport"]');
+      if (viewport) viewport.setAttribute('content', 'width=1024, initial-scale=1, viewport-fit=cover');
+    }
+  } catch (_) {}
+})();
+</script><link rel="stylesheet" href="style.css"><meta name="theme-color" content="#241a17"><meta name="description" content="Offline-first point of sale for Ronyal Super Store"><link rel="manifest" href="manifest.json"><title>Ronyal Super Store POS — Three-file edition</title>
+</head><body><div class="app"><header class="top"><div class="brand"><div class="logo">R</div><div><h1>Ronyal Super Store</h1><small>Point of Sale · Offline-first</small></div></div><div class="top-actions"><span class="status" id="connectionStatus">● Local mode</span><button type="button" id="lockPosButton" class="lock-header-btn" aria-label="Lock POS">🔒 Lock</button></div></header><div class="layout"><aside class="nav" id="sideNav"></aside><main class="content" id="main"><section class="panel"><h2>Starting Ronyal Super Store POS…</h2><p class="muted">Opening your local store database. Your saved records are not being reset.</p><p class="small muted" id="startupHelp">If this stays here for more than 10 seconds, close other Ronyal POS tabs and reload. Do not clear browser data.</p></section></main></div><nav class="mobile-nav" id="mobileNav"></nav><div class="foot">Your records are stored on this device. Export regular backups to protect your data.</div></div><div id="overlay"></div><div id="toast" class="toast hidden"></div>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<div class="desktop-scroll-tools" id="desktopScrollTools" aria-label="Page scrolling controls" hidden>
+  <button type="button" id="scrollPageUp" aria-label="Scroll to top" title="Scroll to top">↑</button>
+  <button type="button" id="scrollPageDown" aria-label="Scroll down" title="Scroll down">↓</button>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
