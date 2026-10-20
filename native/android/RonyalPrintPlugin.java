@@ -166,59 +166,118 @@ public class RonyalPrintPlugin extends Plugin {
     private static final String TEMP_LENGTH_KEY = "_ronyalFileExpectedLength";
 
     @PluginMethod
-    public void saveFile(PluginCall call) {
-        Context context = getContext();
-        if (context == null) {
-            call.reject("Android context is unavailable.");
-            return;
-        }
-        String fileName = call.getString("fileName", "ronyal-export.txt");
-        String mimeType = call.getString("mimeType", "application/octet-stream");
-        String contentBase64 = call.getString("contentBase64");
-        if (contentBase64 == null || contentBase64.isEmpty()) {
-            call.reject("File content is missing.");
-            return;
-        }
+public void saveFile(PluginCall call) {
+    Context context = getContext();
 
-        File tempFile = null;
-        try {
-            byte[] bytes = Base64.decode(contentBase64, Base64.DEFAULT);
-            if (bytes.length == 0) {
-                call.reject("Backup is empty; no file was saved.");
-                return;
-            }
-            File cacheDir = new File(context.getCacheDir(), "ronyal-backups");
-            if (!cacheDir.exists() && !cacheDir.mkdirs()) {
-                throw new IllegalStateException("Could not create temporary backup folder.");
-            }
-            tempFile = File.createTempFile("ronyal-export-", ".tmp", cacheDir);
-            try (FileOutputStream out = new FileOutputStream(tempFile)) {
-                out.write(bytes);
-                out.flush();
-                out.getFD().sync();
-            }
-            if (!tempFile.isFile() || tempFile.length() != bytes.length || tempFile.length() <= 0) {
-                throw new IllegalStateException("Temporary backup could not be written completely.");
-            }
-
-            // Save only a small path and length in Capacitor state, never the full Base64 backup.
-            call.getData().put(TEMP_PATH_KEY, tempFile.getAbsolutePath());
-            call.getData().put(TEMP_LENGTH_KEY, (long) bytes.length);
-            call.save();
-
-            Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT);
-            intent.addCategory(Intent.CATEGORY_OPENABLE);
-            intent.setType(mimeType);
-            intent.putExtra(Intent.EXTRA_TITLE, fileName);
-            startActivityForResult(call, intent, "saveFileResult");
-        } catch (IllegalArgumentException e) {
-            deleteQuietly(tempFile);
-            call.reject("File content could not be decoded.", e);
-        } catch (Exception e) {
-            deleteQuietly(tempFile);
-            call.reject("Could not prepare backup for saving: " + safeMessage(e), e);
-        }
+    if (context == null) {
+        call.reject("Android context is unavailable.");
+        return;
     }
+
+    String fileName = call.getString(
+            "fileName", "ronyal-export.json"
+    );
+
+    String mimeType = call.getString(
+            "mimeType", "application/octet-stream"
+    );
+
+    String contentText = call.getString("contentText");
+
+    if (contentText == null || contentText.isEmpty()) {
+        call.reject("File content is missing.");
+        return;
+    }
+
+    File tempFile = null;
+
+    try {
+        File cacheDir = new File(
+                context.getCacheDir(), "ronyal-backups"
+        );
+
+        if (!cacheDir.exists() && !cacheDir.mkdirs()) {
+            throw new IllegalStateException(
+                    "Could not create temporary backup folder."
+            );
+        }
+
+        tempFile = File.createTempFile(
+                "ronyal-export-", ".tmp", cacheDir
+        );
+
+        try (
+            java.io.BufferedWriter writer =
+                new java.io.BufferedWriter(
+                    new java.io.OutputStreamWriter(
+                        new FileOutputStream(tempFile),
+                        java.nio.charset.StandardCharsets.UTF_8
+                    )
+                )
+        ) {
+            int chunkSize = 8192;
+
+            for (int offset = 0;
+                 offset < contentText.length();
+                 offset += chunkSize) {
+
+                int end = Math.min(
+                        contentText.length(),
+                        offset + chunkSize
+                );
+
+                writer.write(
+                        contentText, offset, end - offset
+                );
+            }
+        }
+
+        long expectedLength = tempFile.length();
+
+        if (expectedLength <= 0) {
+            throw new IllegalStateException(
+                    "Temporary backup is empty."
+            );
+        }
+
+        call.getData().put(
+                TEMP_PATH_KEY,
+                tempFile.getAbsolutePath()
+        );
+
+        call.getData().put(
+                TEMP_LENGTH_KEY,
+                expectedLength
+        );
+
+        call.save();
+
+        Intent intent = new Intent(
+                Intent.ACTION_CREATE_DOCUMENT
+        );
+
+        intent.addCategory(Intent.CATEGORY_OPENABLE);
+        intent.setType(mimeType);
+        intent.putExtra(Intent.EXTRA_TITLE, fileName);
+
+        startActivityForResult(
+                call, intent, "saveFileResult"
+        );
+
+    } catch (Exception e) {
+        deleteQuietly(tempFile);
+
+        String message = e.getMessage();
+
+        if (message == null || message.trim().isEmpty()) {
+            message = e.getClass().getSimpleName();
+        }
+
+        call.reject(
+                "Could not prepare backup: " + message, e
+        );
+    }
+}
 
     @ActivityCallback
     private void saveFileResult(PluginCall call, ActivityResult result) {
