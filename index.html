@@ -1315,7 +1315,41 @@ function bindReceipts(){document.querySelectorAll('[data-receipt]').forEach(b=>b
 async function exportBackup(){try{const names=['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'];const data={app:'Ronyal Super Store POS',schemaVersion:5,exportedAt:new Date().toISOString()};for(const name of names)data[name]=await getAll(name);if(!Array.isArray(data.returns))throw new Error('Could not read return records from the local database.');const json=JSON.stringify(data,null,2);if(!json||!JSON.parse(json).returns)throw new Error('Backup verification failed: return records are missing.');await downloadBlob(json,`ronyal-pos-backup-${today()}.json`,'application/json');toast(`Full backup saved · ${data.returns.length} return record(s) included`)}catch(e){toast('Backup was not saved: '+(e?.message||e))}}
 async function restoreBackup(){if(!confirm('WARNING: This will replace ALL current products, sales, expenses, customers, suppliers, purchases, credit repayment records and item-return records in this app. Export a backup first. Continue?'))return;try{let raw='';const nativeFiles=window.RonyalFiles;if(window.Capacitor?.isNativePlatform?.()&&nativeFiles?.pickFile){const picked=await nativeFiles.pickFile({mimeType:'application/json'});if(!picked?.contentBase64)throw new Error('No backup file was selected.');raw=decodeBase64Utf8(picked.contentBase64)}else{const file=document.getElementById('restoreFile')?.files?.[0];if(!file){toast('Choose a backup JSON file first.');return}raw=await file.text()}const data=JSON.parse(raw);if(!data||data.app!=='Ronyal Super Store POS'||![1,2,3,4,5].includes(data.schemaVersion))throw new Error('This is not a compatible Ronyal POS backup.');for(const n of ['products','sales','expenses','customers','suppliers'])if(!Array.isArray(data[n]))throw new Error(`Backup is missing ${n} data.`);if(!Array.isArray(data.purchases))data.purchases=[];if(!Array.isArray(data.creditPayments))data.creditPayments=[];if(!Array.isArray(data.returns))data.returns=[];for(const n of ['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'])await new Promise((res,rej)=>{const tx=db.transaction(n,'readwrite'),store=tx.objectStore(n);store.clear();data[n].forEach(item=>store.put(item));tx.oncomplete=res;tx.onerror=()=>rej(tx.error)});document.getElementById('restoreFile').value='';toast('Backup restored successfully');await render()}catch(e){if(!String(e?.message||e).toLowerCase().includes('file was selected'))alert('Could not restore backup: '+(e?.message||e))}}
 function decodeBase64Utf8(b64){const bytes=Uint8Array.from(atob(b64),c=>c.charCodeAt(0));return new TextDecoder().decode(bytes)}
-async function downloadBlob(content,name,type){if(window.Capacitor?.isNativePlatform?.()){if(!window.RonyalFiles?.saveFile)throw new Error('Android file-saving bridge is missing. Rebuild the latest APK.');const bytes=new TextEncoder().encode(String(content));let binary='';for(let i=0;i<bytes.length;i+=0x8000)binary+=String.fromCharCode(...bytes.subarray(i,i+0x8000));const result=await window.RonyalFiles.saveFile({fileName:name,mimeType:type,contentBase64:btoa(binary)});if(!result?.saved)throw new Error('Android did not confirm saving the file.');return result}const blob=new Blob([content],{type}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);return {saved:true}}
+async function downloadBlob(content, name, type) {
+    if (window.Capacitor?.isNativePlatform?.()) {
+        if (!window.RonyalFiles?.saveFile) {
+            throw new Error(
+                'Android file-saving bridge is missing. Rebuild the latest APK.'
+            );
+        }
+
+        const result = await window.RonyalFiles.saveFile({
+            fileName: name,
+            mimeType: type,
+            contentText: String(content)
+        });
+
+        if (!result?.saved) {
+            throw new Error('Android did not confirm saving the file.');
+        }
+
+        return result;
+    }
+
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+
+    return { saved: true };
+  }
 async function exportSalesCsv(){try{const periodOptions=['daily','weekly','monthly','alltime'];const period=periodOptions.includes(localStorage.getItem('ronyalReportPeriod'))?localStorage.getItem('ronyalReportPeriod'):'monthly';const now=new Date(),todayStart=new Date(now.getFullYear(),now.getMonth(),now.getDate());let from;if(period==='alltime'){from=new Date(0)}else if(period==='daily'){from=todayStart}else if(period==='weekly'){const offset=(todayStart.getDay()+6)%7;from=new Date(todayStart);from.setDate(from.getDate()-offset)}else{from=new Date(now.getFullYear(),now.getMonth(),1)}const to=new Date(todayStart);to.setDate(to.getDate()+1);const [allSales,allReturns]=await Promise.all([getAll('sales'),getAll('returns')]);const sales=allSales.filter(s=>{if(!s.date)return false;const d=new Date(s.date);return !Number.isNaN(d.getTime())&&d>=from&&d<to}).sort((a,b)=>a.date.localeCompare(b.date));const periodReturns=allReturns.filter(r=>{if(!r.date)return false;const d=new Date(r.date);return !Number.isNaN(d.getTime())&&d>=from&&d<to}).sort((a,b)=>a.date.localeCompare(b.date));const rows=[['Type','Receipt','Date','Payment / Refund method','Subtotal','Discount','Total / Refund','Items']];sales.forEach(s=>rows.push(['Sale',s.receipt,s.date,s.payment,s.subtotal,s.discount,s.total,(Array.isArray(s.items)?s.items:[]).map(i=>`${i.name} x${i.qty}`).join('; ')]));periodReturns.forEach(r=>rows.push(['Return',r.receipt,r.date,r.refundMethod||'', '', '',-Number(r.refundTotal||0),(Array.isArray(r.items)?r.items:[]).map(i=>`${i.name} x${i.qty}`).join('; ')]));const csv=rows.map(r=>r.map(v=>'"'+String(v??'').replace(/"/g,'""')+'"').join(',')).join('\r\n');await downloadBlob('\ufeff'+csv,`ronyal-sales-${period}-${today()}.csv`,'text/csv;charset=utf-8');toast(`Sales CSV saved: ${period==='alltime'?'all recorded sales and returns':period+' sales and returns'} (${sales.length} sales, ${periodReturns.length} returns)`)}catch(e){toast('CSV was not saved: '+(e?.message||e))}}
 async function scannerWithTimeout(promise,ms,message){
  let timer;const timeout=new Promise((_,reject)=>{timer=setTimeout(()=>reject(new Error(message)),ms)});
