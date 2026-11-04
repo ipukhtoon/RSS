@@ -9,7 +9,9 @@ This backend is designed to preserve the existing database path:
 - On the original owner installation, link the current Firebase anonymous user to the owner's email/password account using Firebase Authentication `linkWithCredential`. Linking preserves that Firebase UID.
 - Verify the owner email, refresh the ID token, then call `claimExistingStore` with the already-saved Store Sync ID and installation ID.
 - The function writes owner/device metadata at `/stores/{storeId}`, outside the existing POS data path.
-- New devices use a one-time owner invitation, register as pending, and receive no data access until approved.
+- The function returns a short-lived Firebase custom-auth sign-in token carrying the store ID and installation ID as claims. Firestore rules require these claims and an active device record, so an owner password alone does not reuse an old device session.
+- New employee devices use a one-time owner invitation, register as pending, and receive no data access until approved. Once approved, the device polls its status and exchanges it for its own device-bound Firebase session.
+- Owner replacement-device recovery requires the original verified owner email/password and a recent sign-in. The function locates the store by the authenticated owner UID, registers the new installation, and issues a device-bound session. The owner can then revoke the lost installation.
 - Never copy the owner's email/password into a cashier APK or share the owner password with employees.
 
 ## Firebase project deployment
@@ -23,4 +25,4 @@ Then run **Actions → Deploy RSS Firebase backend → Run workflow**. Deploymen
 
 ## Current implementation boundary
 
-The frontend still uses the legacy anonymous-auth and local PIN flow. Do not remove that flow or enable the new rules until the client-side migration UI is implemented, tested against the existing project, and the original owner device has successfully claimed the store. The rules intentionally deny unregistered users; deploying them prematurely would interrupt existing device synchronization.
+The frontend still uses the legacy anonymous-auth and local PIN flow. Do not remove that flow or enable the new rules until the client-side migration UI is implemented, tested against the existing project, and the original owner device has successfully claimed the store. The rules intentionally deny unregistered users; deploying them prematurely would interrupt existing device synchronization. The account migration must link the existing anonymous user to email/password before claiming so its Firebase UID and access to the existing data path remain unchanged.
