@@ -1354,9 +1354,9 @@ function withFirebaseTimeout(promise,ms,label){
 }
 async function initFirebase(){
   const config=getFirebaseConfig();
-  if(!config||!config.apiKey||!config.projectId||!config.appId)throw new Error('Firebase setup is incomplete. Save API key, Project ID and App ID first.');
+  if(!config||!config.apiKey||!config.projectId||!config.appId)throw new Error('The existing Firebase web app configuration is missing from this installation. The app must be built with the store Firebase configuration.');
   if(!navigator.onLine)throw new Error('Device is offline. Local POS is still available; reconnect to sync.');
-  if(!window.firebase||!firebase.initializeApp||!firebase.firestore||!firebase.auth)throw new Error('Firebase SDK did not load. Open the POS with internet access and make sure www.gstatic.com is not blocked.');
+  if(!window.firebase||!firebase.initializeApp||!firebase.firestore||!firebase.auth||!firebase.functions)throw new Error('Firebase SDK did not load completely. Open the POS with internet access and make sure www.gstatic.com is not blocked.');
   const normalized={apiKey:config.apiKey,authDomain:config.authDomain||`${config.projectId}.firebaseapp.com`,projectId:config.projectId,appId:config.appId};
   if(!firebaseApp||firebaseApp.options.projectId!==normalized.projectId||firebaseApp.options.appId!==normalized.appId){
     const existing=firebase.apps.find(a=>a.options.projectId===normalized.projectId&&a.options.appId===normalized.appId);
