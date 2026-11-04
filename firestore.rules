@@ -33,14 +33,14 @@ service cloud.firestore {
       let p = get(employeeDocPath(storeId)).data.permissions;
       return p[permission] == true ||
         (p.reports == true && permission in ['products','sales','expenses','purchases','returns']) ||
-        (permission == 'products' && (p.dashboard == true || p.newSale == true || p.purchases == true)) ||
+        (permission == 'products' && (p.dashboard == true || p.newSale == true || p.purchases == true || p.returns == true)) ||
         (permission == 'sales' && (p.dashboard == true || p.newSale == true || p.returns == true || p.udhaar == true)) ||
         (permission == 'returns' && (p.dashboard == true || p.sales == true));
     }
     function employeeCanWrite(storeId, permission) {
       let p = get(employeeDocPath(storeId)).data.permissions;
       return p[permission] == true ||
-        (permission == 'products' && (p.newSale == true || p.purchases == true)) ||
+        (permission == 'products' && (p.newSale == true || p.purchases == true || p.returns == true)) ||
         (permission == 'sales' && p.newSale == true);
     }
     function canRead(storeId, permission) {
