@@ -32,10 +32,12 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPairGenerator;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.Signature;
 import java.security.spec.ECGenParameterSpec;
+import java.security.spec.KeySpec;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 
@@ -111,9 +113,11 @@ public class RonyalPrintPlugin extends Plugin {
         try {
             KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
             keyStore.load(null);
-            java.security.Key key = keyStore.getKey(DEVICE_KEY_ALIAS, null);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && key instanceof android.security.keystore.KeyInfo) {
-                return ((android.security.keystore.KeyInfo) key).isInsideSecureHardware();
+            PrivateKey key = (PrivateKey) keyStore.getKey(DEVICE_KEY_ALIAS, null);
+            java.security.spec.KeySpec spec = KeyFactory.getInstance(key.getAlgorithm(), "AndroidKeyStore")
+                    .getKeySpec(key, android.security.keystore.KeyInfo.class);
+            if (spec instanceof android.security.keystore.KeyInfo) {
+                return ((android.security.keystore.KeyInfo) spec).isInsideSecureHardware();
             }
         } catch (Exception ignored) { }
         return false;
