@@ -23,12 +23,18 @@ This backend is designed to preserve the existing database path:
 
 ## Firebase project deployment
 
-The repository workflow `.github/workflows/deploy-firebase.yml` deploys Cloud Functions and Firestore rules. Before running it, add these repository Actions secrets:
+The backend is deliberately deployed in two stages so existing devices are not locked out prematurely.
+
+1. Run `.github/workflows/deploy-firebase.yml` first. It deploys **Cloud Functions only** and leaves the current Firestore rules unchanged. This enables owner claim, device invitations, approvals and recovery while old devices can still sync.
+2. On the original owner device, link/verify the owner account and claim the existing store. Create one-time invitations for every other existing POS installation. Each device must register, be approved, sign in with its device-bound session, and complete a successful sync.
+3. Only after every existing device is confirmed active, run `.github/workflows/deploy-firestore-rules.yml` and confirm that all devices are authorized. This deploys the restrictive rules. Any unregistered device will lose cloud access.
+
+Both workflows require these repository Actions secrets:
 
 1. `FIREBASE_PROJECT_ID`: the existing Firebase project's project ID.
 2. `FIREBASE_SERVICE_ACCOUNT`: the JSON contents of a service account with permission to deploy Cloud Functions and Firestore rules. Keep this private; never put it in `index.html` or commit it to the repository.
 
-Then run **Actions → Deploy RSS Firebase backend → Run workflow**. Deployment is not complete until that workflow succeeds.
+Run **Actions → Deploy RSS Firebase Functions (Stage 1) → Run workflow** first. Do not run the Firestore rules workflow until the device migration checklist above is complete. Deployment is not complete until the corresponding workflow succeeds.
 
 ## Current implementation boundary
 
