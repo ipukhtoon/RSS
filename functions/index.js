@@ -52,6 +52,9 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
     if (deviceSnap.exists && deviceSnap.data().authUid !== uid) {
       throw new HttpsError("already-exists", "This installation is already registered to another account.");
     }
+    if (storeSnap.exists && deviceSnap.exists && deviceSnap.data().status !== "active") {
+      throw new HttpsError("permission-denied", "This owner device was revoked or suspended. Use verified owner recovery on a replacement installation.");
+    }
     tx.set(storeRef, {
       ownerUid: uid,
       ownerEmail: email,
@@ -107,7 +110,7 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
   const raw = split[1];
   if (!/^[A-Za-z0-9_-]{30,80}$/.test(raw)) throw new HttpsError("invalid-argument", "The activation code is invalid.");
   const inviteRef = stores().doc(storeId).collection("deviceInvites").doc(hashCode(raw));
-  const deviceRef = stores().doc(storeId).collection("devices").doc(uid);
+  const deviceRef = stores().doc(storeId).collection("devices").doc(installationId);
   const installationId = cleanText(request.data?.deviceId, 100);
   if (!/^[a-zA-Z0-9_-]{12,100}$/.test(installationId)) throw new HttpsError("invalid-argument", "The installation ID is invalid.");
   await db.runTransaction(async (tx) => {
@@ -119,7 +122,7 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
     if (existing.exists && existing.data().authUid !== uid) throw new HttpsError("already-exists", "This device record belongs to another sign-in.");
     tx.update(inviteRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: uid });
     tx.set(deviceRef, {
-      deviceId: uid, installationId, authUid: uid,
+      deviceId: installationId, installationId, authUid: uid,
       deviceName: cleanText(request.data?.deviceName, 80) || "New POS device",
       status: "pending", employeeId: null,
       registeredAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -152,7 +155,7 @@ exports.revokeDevice = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const storeId = validStoreId(request.data?.storeId);
   const deviceId = cleanText(request.data?.deviceId, 100);
-  if (!deviceId) throw new HttpsError("invalid-argument", "Choose another device. The current owner device cannot revoke itself.");
+  if (!deviceId || deviceId === request.auth.token.rssDeviceId) throw new HttpsError("invalid-argument", "Choose another device. The current owner device cannot revoke itself.");
   await requireOwner(storeId, uid, request.auth.token);
   const ref = stores().doc(storeId).collection("devices").doc(deviceId);
   const snap = await ref.get();
@@ -185,6 +188,9 @@ exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request)
   if (owned.size > 1) throw new HttpsError("failed-precondition", "More than one store is linked to this account. Contact support to select the correct store.");
   const storeDoc = owned.docs[0], storeId = storeDoc.id, employeeId = "owner-" + uid;
   const deviceRef = storeDoc.ref.collection("devices").doc(deviceId);
+  const existingDevice = await deviceRef.get();
+  if (existingDevice.exists && existingDevice.data().authUid !== uid) throw new HttpsError("already-exists", "This installation ID is already assigned to another account.");
+  if (request.auth.token.firebase?.sign_in_provider !== "password" || Date.now() - Number(request.auth.token.auth_time || 0) * 1000 > 10 * 60 * 1000) throw new HttpsError("requires-recent-login", "Sign in again with the owner email and password to approve this replacement device.");
   await deviceRef.set({ deviceId, installationId: deviceId, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   return { ok: true, storeId, employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
