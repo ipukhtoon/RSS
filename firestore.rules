@@ -32,7 +32,8 @@ service cloud.firestore {
     function canRead(storeId, permission) {
       return isOwner(storeId) ||
         (activeMember(storeId) &&
-         get(employeeDocPath(storeId)).data.permissions[permission] == true);
+         (get(employeeDocPath(storeId)).data.permissions[permission] == true ||
+          (get(employeeDocPath(storeId)).data.permissions.reports == true && permission in ['products','sales','expenses','purchases','returns'])));
     }
     function canWrite(storeId, permission) {
       return isOwner(storeId) ||
