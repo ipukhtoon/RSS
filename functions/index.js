@@ -199,3 +199,33 @@ exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request)
   await deviceRef.set({ deviceId, installationId: deviceId, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   return { ok: true, storeId, employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
+
+exports.assignDevice = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request);
+  const storeId = validStoreId(request.data?.storeId);
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  const employeeId = cleanText(request.data?.employeeId, 128);
+  if (!deviceId || !employeeId) throw new HttpsError("invalid-argument", "Choose a device and employee.");
+  await requireOwner(storeId, uid, request.auth.token);
+  const storeRef = stores().doc(storeId), deviceRef = storeRef.collection("devices").doc(deviceId), employeeRef = storeRef.collection("employees").doc(employeeId);
+  const results = await Promise.all([deviceRef.get(), employeeRef.get()]);
+  const device = results[0], employee = results[1];
+  if (!device.exists || device.data().status !== "active" || device.data().role === "owner") throw new HttpsError("failed-precondition", "Only an active employee device can be reassigned.");
+  if (!employee.exists || employee.data().status !== "active" || employee.data().role === "owner") throw new HttpsError("failed-precondition", "Choose an active non-owner employee.");
+  await deviceRef.update({ employeeId, reassignedAt: admin.firestore.FieldValue.serverTimestamp(), reassignedBy: uid });
+  return { ok: true };
+});
+
+exports.renameDevice = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request);
+  const storeId = validStoreId(request.data?.storeId);
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  const deviceName = cleanText(request.data?.deviceName, 80);
+  if (!deviceId || !deviceName) throw new HttpsError("invalid-argument", "Enter a device name.");
+  await requireOwner(storeId, uid, request.auth.token);
+  const ref = stores().doc(storeId).collection("devices").doc(deviceId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new HttpsError("not-found", "Device not found.");
+  await ref.update({ deviceName, renamedAt: admin.firestore.FieldValue.serverTimestamp(), renamedBy: uid });
+  return { ok: true };
+});
