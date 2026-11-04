@@ -54,6 +54,7 @@ jobs:
           const html = fs.readFileSync('index.html', 'utf8');
           const requiredFunctions = [
             'exports.beginDeviceChallenge',
+            'exports.enrollDeviceIdentity',
             'verifyDeviceProof(request, storeId, installationId, "register", true)',
             'verifyDeviceProof(request, storeId, deviceId, "status", false, true)',
             'verifyDeviceProof(request, storeId, deviceId, "recovery", true)',
