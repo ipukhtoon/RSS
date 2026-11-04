@@ -1,0 +1,100 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function storePath(storeId) { return /databases/$(database)/documents/stores/$(storeId); }
+    function devicePath(storeId) { return /databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid); }
+    function isOwner(storeId) {
+      return signedIn() && exists(storePath(storeId)) &&
+        get(storePath(storeId)).data.ownerUid == request.auth.uid;
+    }
+    function deviceRecord(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)/devices/$(get(devicePath(storeId)).data.deviceId));
+    }
+    function hasActiveDevice(storeId) {
+      return signedIn() &&
+        exists(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.authUid == request.auth.uid &&
+        get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.status == 'active';
+    }
+    function memberEmployee(storeId) {
+      return get(/databases/$(database)/documents/stores/$(storeId)/employees/$(get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.employeeId));
+    }
+    function activeMember(storeId) {
+      return isOwner(storeId) ||
+        (hasActiveDevice(storeId) &&
+         memberEmployee(storeId).data.status == 'active');
+    }
+    function canRead(storeId, permission) {
+      return isOwner(storeId) ||
+        (activeMember(storeId) && memberEmployee(storeId).data.permissions[permission] == true);
+    }
+    function canWrite(storeId, permission) {
+      return isOwner(storeId) ||
+        (activeMember(storeId) && memberEmployee(storeId).data.permissions[permission] == true);
+    }
+
+    match /stores/{storeId} {
+      allow read: if activeMember(storeId);
+      // Store ownership is created/changed only by trusted Cloud Functions.
+      allow create, update, delete: if false;
+
+      match /employees/{employeeId} {
+        allow read: if isOwner(storeId) ||
+          (activeMember(storeId) &&
+           get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.employeeId == employeeId);
+        allow create, update, delete: if isOwner(storeId);
+      }
+
+      match /devices/{deviceId} {
+        allow read: if isOwner(storeId) ||
+          (signedIn() && deviceId == request.auth.uid &&
+           resource.data.authUid == request.auth.uid);
+        // Device registration, approval and revocation are callable Functions only.
+        allow create, update, delete: if false;
+      }
+
+      match /deviceInvites/{inviteId} {
+        allow read, write: if false;
+      }
+
+      match /ronyal_pos/{docId} {
+        allow read: if activeMember(storeId);
+        allow create, update: if isOwner(storeId) ||
+          (docId == 'root' && activeMember(storeId) &&
+           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionTest']));
+        allow delete: if isOwner(storeId);
+
+        match /{collectionName}/{recordId} {
+          function permissionForCollection() {
+            return collectionName == 'products' ? 'products' :
+              collectionName == 'sales' ? 'sales' :
+              collectionName == 'expenses' ? 'expenses' :
+              collectionName == 'customers' ? 'udhaar' :
+              collectionName == 'creditPayments' ? 'udhaar' :
+              collectionName == 'suppliers' ? 'purchases' :
+              collectionName == 'purchases' ? 'purchases' :
+              collectionName == 'returns' ? 'returns' : '__deny__';
+          }
+          allow read: if permissionForCollection() != '__deny__' &&
+            canRead(storeId, permissionForCollection());
+          allow create, update, delete: if permissionForCollection() != '__deny__' &&
+            canWrite(storeId, permissionForCollection());
+        }
+
+        match /_tombstones/{tombstoneId} {
+          allow read: if activeMember(storeId);
+          allow create, update: if activeMember(storeId) &&
+            request.resource.data.store in ['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'] &&
+            canWrite(storeId,
+              request.resource.data.store == 'products' ? 'products' :
+              request.resource.data.store == 'sales' ? 'sales' :
+              request.resource.data.store == 'expenses' ? 'expenses' :
+              request.resource.data.store == 'customers' || request.resource.data.store == 'creditPayments' ? 'udhaar' :
+              request.resource.data.store == 'returns' ? 'returns' : 'purchases');
+          allow delete: if isOwner(storeId);
+        }
+      }
+    }
+  }
+}
