@@ -1407,7 +1407,52 @@ async function runWithConcurrency(items,limit,worker){let next=0;const results=n
 async function applyCloudRecord(storeName,docId,cloud){if(!cloud||cloud._deleted)return false;const row=stripCloudFields(cloud,docId),local=await getByKey(storeName,row.id);if(!local||timestampOf(row)>timestampOf(local)||(timestampOf(row)===timestampOf(local)&&Number(row._posSync?.revision||0)>Number(local._posSync?.revision||0))){syncApplyingRemote=true;try{await put(storeName,row)}finally{syncApplyingRemote=false}return true}if(timestampOf(local)>timestampOf(row))scheduleAutoSync(250);return false}
 async function startRealtimeListeners(){if(!navigator.onLine||realtimeStarting)return;const cfg=getFirebaseConfig(),sid=(localStorage.getItem('ronyalStoreSyncId')||'').trim();if(!cfg||!sid)return;const key=(cfg.projectId||'')+'|'+sid;if(realtimeStoreKey===key&&realtimeUnsubs.length)return;realtimeStarting=true;try{const dbf=await initFirebase(),base=cloudStoreRoot(dbf);stopRealtimeListeners();realtimeStoreKey=key;for(const n of FIREBASE_STORES.filter(canReadStore)){const off=base.collection(n).onSnapshot(snap=>{let changed=false;snap.docChanges().forEach(change=>{if(change.type==='removed')return;const cloud=change.doc.data()||{};applyCloudRecord(n,change.doc.id,cloud).then(didChange=>{if(didChange){changed=true;if(view==='dashboard')scheduleRealtimeRefresh()}}).catch(e=>setSyncMessage('Live update failed: '+e.message))})},err=>setSyncMessage('Live updates paused: '+err.message));realtimeUnsubs.push(off)}const offT=base.collection('_tombstones').onSnapshot(snap=>{snap.docChanges().forEach(change=>{if(change.type==='removed')return;const t=change.doc.data()||{};if(!t.deleted||!FIREBASE_STORES.includes(t.store)||!t.id||!canReadStore(t.store))return;(async()=>{const local=await getByKey(t.store,t.id);if(local&&timestampOf(local)>timestampOf(t))return;if(local){syncApplyingRemote=true;try{await del(t.store,t.id)}finally{syncApplyingRemote=false}if(view==='dashboard')scheduleRealtimeRefresh()}const pending=getTombstones();delete pending[tombstoneKey(t.store,t.id)];localStorage.setItem('ronyalSyncTombstones',JSON.stringify(pending))})().catch(e=>setSyncMessage('Live deletion update failed: '+e.message))})},err=>setSyncMessage('Live deletion updates paused: '+err.message));realtimeUnsubs.push(offT)}catch(e){stopRealtimeListeners();setSyncMessage('Live updates unavailable; periodic sync remains active: '+e.message)}finally{realtimeStarting=false}}
 let realtimeRefreshTimer=null;function scheduleRealtimeRefresh(){clearTimeout(realtimeRefreshTimer);realtimeRefreshTimer=setTimeout(()=>{if(view==='dashboard'&&!document.querySelector('#main input:focus, #main textarea:focus, #main select:focus'))render().catch(()=>{})},500)}
-async function runAutoSync(){const dbf=await initFirebase(),base=cloudStoreRoot(dbf);await startRealtimeListeners();let uploaded=0,downloaded=0,unchanged=0;for(const n of FIREBASE_STORES){if(!canReadStore(n))continue;const allowUpload=canWriteStore(n);const rows=await getAll(n);const results=await runWithConcurrency(rows,6,row=>syncOneLocalRow(base,n,row,allowUpload));for(const result of results){if(result==='uploaded')uploaded++;else if(result==='downloaded')downloaded++;else unchanged++}const snap=await base.collection(n).get();const localMap=new Map((await getAll(n)).map(x=>[String(x.id),x]));const incoming=[];for(const doc of snap.docs){const cloud=doc.data()||{};if(cloud._deleted)continue;const row=stripCloudFields(cloud,doc.id),local=localMap.get(String(row.id));if(!local||timestampOf(row)>timestampOf(local)||(timestampOf(row)===timestampOf(local)&&Number(row._posSync?.revision||0)>Number(local._posSync?.revision||0)))incoming.push({doc,row,local});else if(timestampOf(local)>timestampOf(row)){} }await runWithConcurrency(incoming,6,async item=>{syncApplyingRemote=true;try{await put(n,item.row)}finally{syncApplyingRemote=false}});downloaded+=incoming.length}const deleted=await syncTombstones(base);lastSyncAt=Date.now();setSyncMessage(`Sync active · ${new Date().toLocaleTimeString()} · live updates enabled · uploaded ${uploaded}, downloaded ${downloaded}, unchanged ${unchanged}, deletions applied ${deleted}.`);return {uploaded,downloaded,unchanged,deleted}}
+async function runAutoSync(){
+ const dbf=await initFirebase(),base=cloudStoreRoot(dbf);
+ await startRealtimeListeners();
+ let uploaded=0,downloaded=0,unchanged=0;
+ for(const n of FIREBASE_STORES){
+  if(!canReadStore(n))continue;
+  const allowUpload=canWriteStore(n);
+  const [rows,snap]=await Promise.all([getAll(n),base.collection(n).get()]);
+  const localMap=new Map(rows.map(row=>[String(row.id),row]));
+  const cloudMap=new Map(snap.docs.map(doc=>[String(doc.id),doc]));
+  const toUpload=[],toDownload=[];
+  for(const row of rows){
+   const id=String(row.id),local=normalizedForCloud(row);
+   clearTombstoneIfOlder(n,id,local._posSync);
+   const doc=cloudMap.get(id);
+   if(!doc){if(allowUpload)toUpload.push({id,local});else unchanged++;continue}
+   const cloud=doc.data()||{};
+   if(cloud._deleted)continue;
+   const cloudTime=timestampOf(cloud),localTime=timestampOf(local);
+   const cloudRevision=Number(cloud._posSync?.revision||0),localRevision=Number(local._posSync?.revision||0);
+   if(localTime>cloudTime||(localTime===cloudTime&&localRevision>cloudRevision)){
+    if(allowUpload)toUpload.push({id,local});else unchanged++;
+   }else if(cloudTime>localTime||(cloudTime===localTime&&cloudRevision>localRevision)){
+    toDownload.push({id,row:stripCloudFields(cloud,id)});
+   }else unchanged++;
+  }
+  for(const doc of snap.docs){
+   const id=String(doc.id),cloud=doc.data()||{};
+   if(cloud._deleted||localMap.has(id))continue;
+   toDownload.push({id,row:stripCloudFields(cloud,id)});
+  }
+  for(let offset=0;offset<toUpload.length;offset+=400){
+   const batch=dbf.batch();
+   const chunk=toUpload.slice(offset,offset+400);
+   for(const item of chunk)batch.set(base.collection(n).doc(item.id),firestoreSafeData({...item.local,_posStore:n,_syncedAt:new Date().toISOString()}));
+   await batch.commit();
+   uploaded+=chunk.length;
+  }
+  await runWithConcurrency(toDownload,6,async item=>{syncApplyingRemote=true;try{await put(n,item.row)}finally{syncApplyingRemote=false}});
+  downloaded+=toDownload.length;
+ }
+ const deleted=await syncTombstones(base);
+ lastSyncAt=Date.now();
+ setSyncMessage(`Sync active · ${new Date().toLocaleTimeString()} · live updates enabled · uploaded ${uploaded}, downloaded ${downloaded}, unchanged ${unchanged}, deletions applied ${deleted}.`);
+ return {uploaded,downloaded,unchanged,deleted}
+}
 async function autoSync(){if(!navigator.onLine)return;if(autoSyncRunning){autoSyncAgain=true;return}autoSyncRunning=true;try{do{autoSyncAgain=false;await runAutoSync()}while(autoSyncAgain)}finally{autoSyncRunning=false}}
 function bindFirebaseSettings(){const el=document.getElementById('firebaseResult'),cfg=getFirebaseConfig(),sid=(localStorage.getItem('ronyalStoreSyncId')||'').trim();if(el)el.textContent=cfg&&sid?'Database setup is saved. Authorized devices sync automatically when online.':'Secure database activation is required before cloud sync. Local records remain available.';updateCleanupHelp();if(!autoSyncStarted){autoSyncStarted=true;if(cfg&&sid)scheduleAutoSync(500)}}
 window.addEventListener('online',async()=>{await refreshDeviceAuthorization().catch(()=>{});if(isUnlocked()){startRealtimeListeners().catch(()=>{});scheduleAutoSync(250)}});window.addEventListener('offline',()=>stopRealtimeListeners());window.addEventListener('focus',()=>{if(Date.now()-lastSyncAt>60000)scheduleAutoSync(250);startRealtimeListeners().catch(()=>{})});document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'){startRealtimeListeners().catch(()=>{});if(Date.now()-lastSyncAt>60000)scheduleAutoSync(250)}});setInterval(()=>{if(document.visibilityState==='visible'&&Date.now()-lastSyncAt>300000)scheduleAutoSync(200)},60000);setInterval(()=>{if(document.visibilityState==='visible')refreshDeviceAuthorization().catch(()=>{})},120000);
