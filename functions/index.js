@@ -42,9 +42,15 @@ const deviceChallengeRef = (storeId, challengeId) => stores().doc(storeId).colle
  */
 exports.beginDeviceChallenge = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
-  const storeId = validStoreId(request.data?.storeId);
-  const deviceId = cleanText(request.data?.deviceId, 100);
   const purpose = cleanText(request.data?.purpose, 24);
+  let storeId = cleanText(request.data?.storeId, 100);
+  if (purpose === "recovery" && !storeId) {
+    const owned = await stores().where("ownerUid", "==", uid).limit(2).get();
+    if (owned.size !== 1) throw new HttpsError("failed-precondition", "The original owner store could not be uniquely identified.");
+    storeId = owned.docs[0].id;
+  }
+  storeId = validStoreId(storeId);
+  const deviceId = cleanText(request.data?.deviceId, 100);
   if (!/^[A-Za-z0-9_-]{12,100}$/.test(deviceId) ||
       !["claim","register","recovery","status","owner"].includes(purpose)) {
     throw new HttpsError("invalid-argument", "Invalid device challenge request.");
@@ -75,7 +81,7 @@ exports.beginDeviceChallenge = onCall({ region: REGION }, async (request) => {
     challengeHash: hashCode(challenge), expiresAt,
     createdAt: admin.firestore.FieldValue.serverTimestamp()
   });
-  return { challengeId, challenge, publicKey, expiresAt };
+  return { challengeId, challenge, publicKey, storeId, expiresAt };
 });
 
 const verifyDeviceProof = async (request, storeId, deviceId, purpose, allowEnrollment = false, allowPending = false) => {
@@ -212,6 +218,7 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
   const installationId = cleanText(request.data?.deviceId, 100);
   const deviceRef = stores().doc(storeId).collection("devices").doc(installationId);
   if (!/^[a-zA-Z0-9_-]{12,100}$/.test(installationId)) throw new HttpsError("invalid-argument", "The installation ID is invalid.");
+  const proofResult = await verifyDeviceProof(request, storeId, installationId, "register", true);
   await db.runTransaction(async (tx) => {
     const inviteSnap = await tx.get(inviteRef);
     if (!inviteSnap.exists || inviteSnap.data().used || inviteSnap.data().expiresAt.toMillis() < Date.now()) {
@@ -238,7 +245,7 @@ exports.approveDevice = onCall({ region: REGION }, async (request) => {
   const deviceId = cleanText(request.data?.deviceId, 100);
   const employeeId = cleanText(request.data?.employeeId, 128);
   if (!deviceId || !employeeId) throw new HttpsError("invalid-argument", "Choose a pending device and an employee.");
-  await requireOwner(storeId, uid, request.auth.token);
+  await requireOwner(storeId, uid, request.auth.token, request);
   const storeRef = stores().doc(storeId);
   const deviceRef = storeRef.collection("devices").doc(deviceId);
   const employeeRef = storeRef.collection("employees").doc(employeeId);
@@ -269,6 +276,7 @@ exports.getDeviceStatus = onCall({ region: REGION }, async (request) => {
   const storeId = validStoreId(request.data?.storeId);
   const deviceId = cleanText(request.data?.deviceId, 100);
   if (!deviceId) throw new HttpsError("invalid-argument", "The installation ID is missing.");
+  await verifyDeviceProof(request, storeId, deviceId, "status", false, true);
   const ref = stores().doc(storeId).collection("devices").doc(deviceId);
   const snap = await ref.get();
   if (!snap.exists || snap.data().authUid !== uid) throw new HttpsError("not-found", "This installation has not been registered for this store.");
@@ -290,6 +298,7 @@ exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request)
   if (owned.empty) throw new HttpsError("not-found", "No existing Ronyal store is linked to this owner account.");
   if (owned.size > 1) throw new HttpsError("failed-precondition", "More than one store is linked to this account. Contact support to select the correct store.");
   const storeDoc = owned.docs[0], storeId = storeDoc.id, employeeId = "owner-" + uid;
+  const proofResult = await verifyDeviceProof(request, storeId, deviceId, "recovery", true);
   const deviceRef = storeDoc.ref.collection("devices").doc(deviceId);
   const existingDevice = await deviceRef.get();
   if (existingDevice.exists && existingDevice.data().authUid !== uid) throw new HttpsError("already-exists", "This installation ID is already assigned to another account.");
