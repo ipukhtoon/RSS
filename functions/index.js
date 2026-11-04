@@ -303,7 +303,17 @@ exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request)
   const existingDevice = await deviceRef.get();
   if (existingDevice.exists && existingDevice.data().authUid !== uid) throw new HttpsError("already-exists", "This installation ID is already assigned to another account.");
   if (request.auth.token.firebase?.sign_in_provider !== "password" || Date.now() - Number(request.auth.token.auth_time || 0) * 1000 > 10 * 60 * 1000) throw new HttpsError("requires-recent-login", "Sign in again with the owner email and password to approve this replacement device.");
-  await deviceRef.set({ deviceId, installationId: deviceId, publicKey: proofResult.publicKey, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  const priorOwnerDevices = await storeDoc.ref.collection("devices").where("role", "==", "owner").where("status", "==", "active").get();
+  const recoveryBatch = db.batch();
+  priorOwnerDevices.docs.forEach(doc => {
+    if (doc.id !== deviceId) recoveryBatch.update(doc.ref, {
+      status: "revoked",
+      revokedAt: admin.firestore.FieldValue.serverTimestamp(),
+      revokedReason: "replaced-by-owner-recovery"
+    });
+  });
+  recoveryBatch.set(deviceRef, { deviceId, installationId: deviceId, publicKey: proofResult.publicKey, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  await recoveryBatch.commit();
   return { ok: true, storeId, employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
 
