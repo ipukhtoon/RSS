@@ -36,6 +36,16 @@ Both workflows require these repository Actions secrets:
 
 Run **Actions → Deploy RSS Firebase Functions (Stage 1) → Run workflow** first. Do not run the Firestore rules workflow until the device migration checklist above is complete. Deployment is not complete until the corresponding workflow succeeds.
 
-## Current implementation boundary
+## Current implementation and release boundary
 
-The frontend still uses the legacy anonymous-auth and local PIN flow. Do not remove that flow or enable the new rules until the client-side migration UI is implemented, tested against the existing project, and the original owner device has successfully claimed the store. The rules intentionally deny unregistered users; deploying them prematurely would interrupt existing device synchronization. The account migration must link the existing anonymous user to email/password before claiming so its Firebase UID and access to the existing data path remain unchanged.
+The branch now contains the account-entry UI, owner account linking/claim flow, employee activation and approval flow, owner recovery, employee permissions, device rename/reassignment/revocation, removal of the PIN login/settings, local IndexedDB write guards, and the staged Firebase deployment workflows. The old IndexedDB database name and existing `/stores/{storeId}/ronyal_pos` data path are preserved. Database version 6 adds indexes without deleting or recreating stores.
+
+**Not ready for production deployment yet:**
+
+- `EMBEDDED_FIREBASE_CONFIG` in `index.html` is intentionally blank because the actual existing Firebase Web app configuration has not been supplied in this repository. Existing devices may still have the previous config saved in localStorage; a fresh installation cannot initialize Firebase until the real Web app values are embedded.
+- The frontend has passed JavaScript syntax checks, and the Functions/package/Firebase JSON files have passed basic syntax/JSON checks. It has not yet been exercised against the live Firebase project, Firebase Emulator Suite, Android WebView, or a real multi-device migration.
+- The device ID is installation-scoped browser storage, not yet a hardware-backed cryptographic identity. Copying an entire app-data profile could clone that ID; copying only the APK does not copy the installation's local storage.
+- The first store claim requires a verified password account and existing POS cloud records under the saved Store ID. The original device should complete a successful cloud sync before claiming.
+- Keep the original permissive Firestore rules until all current devices are migrated and tested. Stage 2 rules deployment is deliberately separate and manually guarded. Never deploy the rules as part of Stage 1.
+
+The local POS should remain available from a valid cached device lease while offline, for up to seven days. A new device cannot activate offline. Revocation takes effect when the device next reconnects or its lease expires. No existing local records are intentionally deleted by this branch.
