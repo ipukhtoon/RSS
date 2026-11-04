@@ -1,4 +1,4 @@
-name: Deploy RSS Firebase backend
+name: Deploy RSS Firebase Functions (Stage 1)
 
 on:
   workflow_dispatch:
@@ -36,7 +36,7 @@ jobs:
           printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
           echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
 
-      - name: Deploy rules and functions
+      - name: Deploy Cloud Functions only (leave existing Firestore rules unchanged)
         env:
           FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
@@ -44,4 +44,4 @@ jobs:
             echo "Missing FIREBASE_PROJECT_ID repository secret."
             exit 1
           fi
-          firebase deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules,functions --non-interactive
+          firebase deploy --project "$FIREBASE_PROJECT_ID" --only functions --non-interactive
