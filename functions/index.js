@@ -176,8 +176,11 @@ exports.getDeviceStatus = onCall({ region: REGION }, async (request) => {
   if (!snap.exists || snap.data().authUid !== uid) throw new HttpsError("not-found", "This installation has not been registered for this store.");
   const data = snap.data();
   if (data.status !== "active") return { status: data.status || "pending" };
+  const employeeSnap = await stores().doc(storeId).collection("employees").doc(data.employeeId).get();
+  if (!employeeSnap.exists || employeeSnap.data().status !== "active") return { status: "suspended" };
   await ref.update({ lastSeen: admin.firestore.FieldValue.serverTimestamp() });
-  return { status: "active", employeeId: data.employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
+  const employee = employeeSnap.data();
+  return { status: "active", employeeId: data.employeeId, employee: { name: employee.name, role: employee.role, permissions: employee.permissions || {} }, customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
 
 exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request) => {
