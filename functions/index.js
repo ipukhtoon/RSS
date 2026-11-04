@@ -78,7 +78,7 @@ exports.beginDeviceChallenge = onCall({ region: REGION }, async (request) => {
   return { challengeId, challenge, publicKey, expiresAt };
 });
 
-const verifyDeviceProof = async (request, storeId, deviceId, purpose, allowEnrollment = false) => {
+const verifyDeviceProof = async (request, storeId, deviceId, purpose, allowEnrollment = false, allowPending = false) => {
   const uid = requireAuth(request);
   const proof = request.data?.deviceProof || {};
   const challengeId = cleanText(proof.challengeId, 100);
@@ -103,7 +103,7 @@ const verifyDeviceProof = async (request, storeId, deviceId, purpose, allowEnrol
     } else {
       const deviceSnap = await tx.get(stores().doc(storeId).collection("devices").doc(deviceId));
       if (!deviceSnap.exists || deviceSnap.data().authUid !== uid ||
-          deviceSnap.data().publicKey !== data.publicKey || deviceSnap.data().status !== "active") {
+          deviceSnap.data().publicKey !== data.publicKey || (deviceSnap.data().status !== "active" && !(allowPending && deviceSnap.data().status === "pending"))) {
         throw new HttpsError("permission-denied", "This device is not actively registered.");
       }
       keyBytes = fromB64url(data.publicKey);
