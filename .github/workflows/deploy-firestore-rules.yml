@@ -1,0 +1,60 @@
+name: Deploy RSS Firestore Security Rules (Stage 2)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm_all_devices_authorized:
+        description: "Confirm every existing POS device has been activated and approved"
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    if: ${{ inputs.confirm_all_devices_authorized == true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Firebase CLI
+        run: npm install --global firebase-tools
+
+      - name: Authenticate Firebase deployment
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: |
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ]; then
+            echo "Missing FIREBASE_SERVICE_ACCOUNT repository secret."
+            exit 1
+          fi
+          printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-service-account.json"
+          echo "GOOGLE_APPLICATION_CREDENTIALS=$RUNNER_TEMP/firebase-service-account.json" >> "$GITHUB_ENV"
+
+      - name: Deploy Firestore security rules only
+        env:
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: |
+          if [ -z "$FIREBASE_PROJECT_ID" ]; then
+            echo "Missing FIREBASE_PROJECT_ID repository secret."
+            exit 1
+          fi
+          firebase deploy --project "$FIREBASE_PROJECT_ID" --only firestore:rules --non-interactive
+
+  require-confirmation:
+    if: ${{ inputs.confirm_all_devices_authorized != true }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Stop unsafe early rules deployment
+        run: |
+          echo "Security rules were not deployed."
+          echo "Activate and approve every existing POS device first."
+          exit 1
