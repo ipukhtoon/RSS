@@ -1,0 +1,76 @@
+name: Validate RSS secure device identity
+
+on:
+  push:
+    branches:
+      - feature/secure-auth-performance
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  syntax-and-security-wiring:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check Firebase Functions syntax
+        run: node --check functions/index.js
+
+      - name: Check every inline JavaScript block
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/rss-inline
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          html = Path("index.html").read_text(encoding="utf-8")
+          blocks = re.findall(r"<script\\b([^>]*)>([\\s\\S]*?)</script\\s*>", html, re.I)
+          inline = [body for attrs, body in blocks if not re.search(r"\\bsrc\\s*=", attrs, re.I) and body.strip()]
+          if not inline:
+              raise SystemExit("No inline JavaScript blocks were found.")
+          for index, body in enumerate(inline, 1):
+              Path(f"/tmp/rss-inline/inline-{index}.js").write_text(body, encoding="utf-8")
+          print(f"Extracted {len(inline)} inline JavaScript blocks.")
+          PY
+          for file in /tmp/rss-inline/*.js; do
+            echo "Checking $file"
+            node --check "$file"
+          done
+
+      - name: Verify device proof wiring
+        run: |
+          node - <<'NODE'
+          const fs = require('node:fs');
+          const functions = fs.readFileSync('functions/index.js', 'utf8');
+          const html = fs.readFileSync('index.html', 'utf8');
+          const requiredFunctions = [
+            'exports.beginDeviceChallenge',
+            'verifyDeviceProof(request, storeId, installationId, "register", true)',
+            'verifyDeviceProof(request, storeId, deviceId, "status", false, true)',
+            'verifyDeviceProof(request, storeId, deviceId, "recovery", true)',
+            'replaced-by-owner-recovery'
+          ];
+          const requiredClient = [
+            'window.RonyalDeviceIdentity',
+            'createDeviceProof(storeId,\'claim\',true)',
+            'createDeviceProof(code.split(\'.\')[0],\'register\',true)',
+            'createDeviceProof(recoveryStoreId,\'recovery\',true)',
+            'name===\'getDeviceStatus\''
+          ];
+          for (const item of requiredFunctions) {
+            if (!functions.includes(item)) throw new Error('Missing backend security wiring: ' + item);
+          }
+          for (const item of requiredClient) {
+            if (!html.includes(item)) throw new Error('Missing client security wiring: ' + item);
+          }
+          console.log('Device challenge, registration, recovery, status and owner proof wiring found.');
+          NODE
