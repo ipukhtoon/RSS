@@ -14,12 +14,19 @@ This backend is designed to preserve the existing database path:
 - Owner replacement-device recovery requires the original verified owner email/password and a recent sign-in. The function locates the store by the authenticated owner UID, registers the new installation, and issues a device-bound session. The owner can then revoke the lost installation.
 - Never copy the owner's email/password into a cashier APK or share the owner password with employees.
 
+## Firebase project preparation
+
+- Keep the existing Firebase project and Firestore database in Mumbai (`asia-south1`).
+- Enable Email/Password Authentication in addition to the existing Anonymous provider. The original installation links its anonymous user to the owner email/password account where possible.
+- The client needs the existing Firebase Web app values (`apiKey`, `authDomain`, `projectId`, `appId`) embedded in `index.html`; these are Firebase web configuration values, not service-account credentials.
+- Cloud Functions deployment requires the Firebase project to be on the Blaze billing plan and the Cloud Functions / Cloud Build APIs to be enabled. The Functions are configured for `asia-south1`.
+
 ## Firebase project deployment
 
 The repository workflow `.github/workflows/deploy-firebase.yml` deploys Cloud Functions and Firestore rules. Before running it, add these repository Actions secrets:
 
 1. `FIREBASE_PROJECT_ID`: the existing Firebase project's project ID.
-2. `FIREBASE_SERVICE_ACCOUNT`: the JSON contents of a service account with permission to deploy Cloud Functions and Firestore rules.
+2. `FIREBASE_SERVICE_ACCOUNT`: the JSON contents of a service account with permission to deploy Cloud Functions and Firestore rules. Keep this private; never put it in `index.html` or commit it to the repository.
 
 Then run **Actions → Deploy RSS Firebase backend → Run workflow**. Deployment is not complete until that workflow succeeds.
 
