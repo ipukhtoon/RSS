@@ -18,7 +18,9 @@ const requireOwner = async (storeId, uid, token) => {
   const ref = stores().doc(storeId), deviceRef = ref.collection('devices').doc(deviceId);
   const results = await Promise.all([ref.get(), deviceRef.get()]);
   const snap = results[0], deviceSnap = results[1];
-  if (!snap.exists || snap.data().ownerUid !== uid || !deviceSnap.exists || deviceSnap.data().authUid !== uid || deviceSnap.data().status !== 'active' || deviceSnap.data().role !== 'owner') throw new HttpsError('permission-denied', 'Only an approved owner device can perform this action.');
+  const employeeId = deviceSnap.exists ? deviceSnap.data().employeeId : null;
+  const employeeSnap = employeeId ? await ref.collection('employees').doc(employeeId).get() : null;
+  if (!snap.exists || snap.data().ownerUid !== uid || !deviceSnap.exists || deviceSnap.data().authUid !== uid || deviceSnap.data().status !== 'active' || deviceSnap.data().role !== 'owner' || !employeeSnap || !employeeSnap.exists || employeeSnap.data().status !== 'active' || employeeSnap.data().role !== 'owner') throw new HttpsError('permission-denied', 'Only an approved owner device can perform this action.');
   return { ref, data: snap.data(), deviceId };
 };
 const validStoreId = (value) => {
