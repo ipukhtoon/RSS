@@ -49,11 +49,11 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
     if (storeSnap.exists && storeSnap.data().ownerUid && storeSnap.data().ownerUid !== uid) {
       throw new HttpsError("already-exists", "This database has already been claimed by a different owner account. Contact support; do not reset or replace the database.");
     }
+    if (storeSnap.exists && storeSnap.data().ownerUid === uid && (!deviceSnap.exists || deviceSnap.data().authUid !== uid || deviceSnap.data().status !== "active")) {
+      throw new HttpsError("permission-denied", "This owner account is already linked to the store. Use verified owner recovery to authorize a replacement installation.");
+    }
     if (deviceSnap.exists && deviceSnap.data().authUid !== uid) {
       throw new HttpsError("already-exists", "This installation is already registered to another account.");
-    }
-    if (storeSnap.exists && deviceSnap.exists && deviceSnap.data().status !== "active") {
-      throw new HttpsError("permission-denied", "This owner device was revoked or suspended. Use verified owner recovery on a replacement installation.");
     }
     tx.set(storeRef, {
       ownerUid: uid,
