@@ -180,6 +180,7 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
     tx.set(deviceRef, {
       deviceId,
       installationId: deviceId,
+      publicKey: proofResult.publicKey,
       authUid: uid,
       employeeId,
       role: "owner",
