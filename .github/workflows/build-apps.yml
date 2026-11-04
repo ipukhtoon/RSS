@@ -1,4 +1,5 @@
 name: Build Ronyal Super Store
+# Build the authentication preview branch for Android and Windows QA.
 
 on:
   workflow_dispatch:
