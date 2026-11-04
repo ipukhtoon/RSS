@@ -30,15 +30,18 @@ service cloud.firestore {
         get(employeeDocPath(storeId)).data.role == 'owner';
     }
     function canRead(storeId, permission) {
-      return isOwner(storeId) ||
-        (activeMember(storeId) &&
-         (get(employeeDocPath(storeId)).data.permissions[permission] == true ||
-          (get(employeeDocPath(storeId)).data.permissions.reports == true && permission in ['products','sales','expenses','purchases','returns'])));
+      let p = get(employeeDocPath(storeId)).data.permissions;
+      return isOwner(storeId) || (activeMember(storeId) && (p[permission] == true ||
+        (p.reports == true && permission in ['products','sales','expenses','purchases','returns']) ||
+        (permission == 'products' && (p.dashboard == true || p.newSale == true || p.purchases == true)) ||
+        (permission == 'sales' && (p.dashboard == true || p.newSale == true || p.returns == true || p.udhaar == true)) ||
+        (permission == 'returns' && (p.dashboard == true || p.sales == true))));
     }
     function canWrite(storeId, permission) {
-      return isOwner(storeId) ||
-        (activeMember(storeId) &&
-         get(employeeDocPath(storeId)).data.permissions[permission] == true);
+      let p = get(employeeDocPath(storeId)).data.permissions;
+      return isOwner(storeId) || (activeMember(storeId) && (p[permission] == true ||
+        (permission == 'products' && (p.newSale == true || p.purchases == true)) ||
+        (permission == 'sales' && p.newSale == true)));
     }
 
     match /stores/{storeId} {
