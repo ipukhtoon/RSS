@@ -66,7 +66,10 @@ service cloud.firestore {
 
       match /ronyal_pos/{rootDocId} {
         allow read: if activeMember(storeId);
-        allow create, update: if isOwner(storeId) ||
+        allow create: if isOwner(storeId) ||
+          (rootDocId == 'root' && activeMember(storeId) &&
+           request.resource.data.keys().hasOnly(['connectionTest']));
+        allow update: if isOwner(storeId) ||
           (rootDocId == 'root' && activeMember(storeId) &&
            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionTest']));
         allow delete: if isOwner(storeId);
