@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/secure-auth-performance
 
 jobs:
   windows:
@@ -307,6 +308,7 @@ jobs:
           grep -q 'window.RonyalBarcodeScanner' www/index.html
           grep -q 'window.RonyalPrinter' www/index.html
           grep -q 'window.RonyalFiles' www/index.html
+          grep -q 'window.RonyalDeviceIdentity' www/index.html
 
           test -s "$JAVA_DIR/RonyalPrintPlugin.java"
 
