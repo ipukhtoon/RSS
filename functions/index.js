@@ -12,9 +12,10 @@ const requireAuth = (request) => {
   return request.auth.uid;
 };
 const issueSessionToken = (uid, storeId, deviceId) => admin.auth().createCustomToken(uid, { rssStoreId: storeId, rssDeviceId: deviceId });
-const requireOwner = async (storeId, uid, token) => {
+const requireOwner = async (storeId, uid, token, request) => {
   const deviceId = cleanText(token && token.rssDeviceId, 100);
   if (!token || token.rssStoreId !== storeId || !deviceId) throw new HttpsError('permission-denied', 'This device has no active owner session.');
+  await verifyDeviceProof(request, storeId, deviceId, "owner", false);
   const ref = stores().doc(storeId), deviceRef = ref.collection('devices').doc(deviceId);
   const results = await Promise.all([ref.get(), deviceRef.get()]);
   const snap = results[0], deviceSnap = results[1];
@@ -30,6 +31,96 @@ const validStoreId = (value) => {
 };
 const hashCode = (code) => crypto.createHash("sha256").update(code).digest("hex");
 
+const b64url = (value) => Buffer.from(value).toString("base64url");
+const fromB64url = (value) => Buffer.from(String(value || ""), "base64url");
+const deviceChallengeRef = (storeId, challengeId) => stores().doc(storeId).collection("deviceChallenges").doc(challengeId);
+
+/**
+ * Issues a short-lived, single-use proof-of-possession challenge.
+ * Enrollment purposes may supply a new public key; existing devices must use
+ * the public key already registered to their device record.
+ */
+exports.beginDeviceChallenge = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request);
+  const storeId = validStoreId(request.data?.storeId);
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  const purpose = cleanText(request.data?.purpose, 24);
+  if (!/^[A-Za-z0-9_-]{12,100}$/.test(deviceId) ||
+      !["claim","register","recovery","status","owner"].includes(purpose)) {
+    throw new HttpsError("invalid-argument", "Invalid device challenge request.");
+  }
+  let publicKey = "";
+  const storeRef = stores().doc(storeId);
+  if (["claim","register","recovery"].includes(purpose)) {
+    publicKey = cleanText(request.data?.publicKey, 1000);
+    if (!publicKey) throw new HttpsError("invalid-argument", "The device public key is missing.");
+    try {
+      const key = crypto.createPublicKey({ key: fromB64url(publicKey), format: "der", type: "spki" });
+      if (key.asymmetricKeyType !== "ec" || key.asymmetricKeyDetails?.namedCurve !== "prime256v1") throw new Error("wrong key type");
+    } catch {
+      throw new HttpsError("invalid-argument", "The device public key is not a valid P-256 key.");
+    }
+  } else {
+    const deviceSnap = await storeRef.collection("devices").doc(deviceId).get();
+    if (!deviceSnap.exists || deviceSnap.data().authUid !== uid || !deviceSnap.data().publicKey) {
+      throw new HttpsError("permission-denied", "This device has no registered secure identity.");
+    }
+    publicKey = deviceSnap.data().publicKey;
+  }
+  const challenge = b64url(crypto.randomBytes(32));
+  const challengeId = b64url(crypto.randomBytes(18));
+  const expiresAt = Date.now() + 2 * 60 * 1000;
+  await deviceChallengeRef(storeId, challengeId).create({
+    uid, storeId, deviceId, purpose, publicKey,
+    challengeHash: hashCode(challenge), expiresAt,
+    createdAt: admin.firestore.FieldValue.serverTimestamp()
+  });
+  return { challengeId, challenge, publicKey, expiresAt };
+});
+
+const verifyDeviceProof = async (request, storeId, deviceId, purpose, allowEnrollment = false) => {
+  const uid = requireAuth(request);
+  const proof = request.data?.deviceProof || {};
+  const challengeId = cleanText(proof.challengeId, 100);
+  const challenge = cleanText(proof.challenge, 200);
+  const signature = fromB64url(proof.signature);
+  if (!challengeId || !challenge || !signature.length) throw new HttpsError("permission-denied", "Secure device proof is required.");
+  const ref = deviceChallengeRef(storeId, challengeId);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError("permission-denied", "The device challenge is invalid or already used.");
+    const data = snap.data();
+    if (data.uid !== uid || data.storeId !== storeId || data.deviceId !== deviceId ||
+        data.purpose !== purpose || data.expiresAt < Date.now() ||
+        data.challengeHash !== hashCode(challenge)) {
+      throw new HttpsError("permission-denied", "The device challenge expired or does not match this request.");
+    }
+    let keyBytes;
+    if (allowEnrollment) {
+      const supplied = cleanText(proof.publicKey, 1000);
+      if (!supplied || supplied !== data.publicKey) throw new HttpsError("permission-denied", "The enrollment public key does not match the challenge.");
+      keyBytes = fromB64url(supplied);
+    } else {
+      const deviceSnap = await tx.get(stores().doc(storeId).collection("devices").doc(deviceId));
+      if (!deviceSnap.exists || deviceSnap.data().authUid !== uid ||
+          deviceSnap.data().publicKey !== data.publicKey || deviceSnap.data().status !== "active") {
+        throw new HttpsError("permission-denied", "This device is not actively registered.");
+      }
+      keyBytes = fromB64url(data.publicKey);
+    }
+    let valid = false;
+    try {
+      const publicKey = crypto.createPublicKey({ key: keyBytes, format: "der", type: "spki" });
+      valid = crypto.verify("sha256", Buffer.from(challenge, "utf8"),
+        { key: publicKey, dsaEncoding: signature.length === 64 ? "ieee-p1363" : "der" }, signature);
+    } catch { valid = false; }
+    if (!valid) throw new HttpsError("permission-denied", "Secure device signature verification failed.");
+    tx.delete(ref);
+  });
+  return { uid, publicKey: cleanText(proof.publicKey, 1000) };
+};
+
+
 exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const email = cleanText(request.auth.token.email, 254).toLowerCase();
@@ -41,6 +132,7 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
   if (!/^[a-zA-Z0-9_-]{12,100}$/.test(deviceId)) {
     throw new HttpsError("invalid-argument", "The installation ID is invalid.");
   }
+  const proofResult = await verifyDeviceProof(request, storeId, deviceId, "claim", true);
   const storeName = cleanText(request.data?.storeName, 100) || "Ronyal Super Store";
   const storeRef = stores().doc(storeId);
   const legacyCollections = ["products","sales","expenses","customers","suppliers","purchases","creditPayments","returns"];
@@ -97,7 +189,7 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
 exports.createDeviceInvite = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const storeId = validStoreId(request.data?.storeId);
-  await requireOwner(storeId, uid, request.auth.token);
+  await requireOwner(storeId, uid, request.auth.token, request);
   const raw = crypto.randomBytes(24).toString("base64url");
   const inviteId = hashCode(raw);
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60 * 1000);
@@ -130,7 +222,7 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
     if (existing.exists && existing.data().status === "active") throw new HttpsError("failed-precondition", "This installation is already authorized. No new registration is needed.");
     tx.update(inviteRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: uid });
     tx.set(deviceRef, {
-      deviceId: installationId, installationId, authUid: uid,
+      deviceId: installationId, installationId, publicKey: proofResult.publicKey, authUid: uid,
       deviceName: cleanText(request.data?.deviceName, 80) || "New POS device",
       status: "pending", employeeId: null,
       registeredAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -202,7 +294,7 @@ exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request)
   const existingDevice = await deviceRef.get();
   if (existingDevice.exists && existingDevice.data().authUid !== uid) throw new HttpsError("already-exists", "This installation ID is already assigned to another account.");
   if (request.auth.token.firebase?.sign_in_provider !== "password" || Date.now() - Number(request.auth.token.auth_time || 0) * 1000 > 10 * 60 * 1000) throw new HttpsError("requires-recent-login", "Sign in again with the owner email and password to approve this replacement device.");
-  await deviceRef.set({ deviceId, installationId: deviceId, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  await deviceRef.set({ deviceId, installationId: deviceId, publicKey: proofResult.publicKey, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
   return { ok: true, storeId, employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
 
