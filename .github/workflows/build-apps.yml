@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - main
+      - feature/email-auth-demo-mode
 
 jobs:
   windows:
