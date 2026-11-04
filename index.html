@@ -1383,7 +1383,7 @@ async function restoreDeviceSession(){
  sessionStorage.setItem('ronyalEmployeeRole',lease.employeeRole||lease.role||'cashier');
  sessionStorage.setItem('ronyalPermissions',JSON.stringify(lease.permissions||{}));
  setLogin(lease.role==='owner'?'owner':'cashier');
- if(navigator.onLine)setTimeout(()=>refreshDeviceAuthorization().catch(()=>{}),0);
+ if(navigator.onLine)setTimeout(async()=>{await refreshDeviceAuthorization().catch(()=>{});if(isUnlocked()){startRealtimeListeners().catch(()=>{});scheduleAutoSync(250)}},0);
  return true
 }
 async function refreshDeviceAuthorization(){let lease;try{lease=JSON.parse(localStorage.getItem('ronyalDeviceLease')||'null')}catch{return}if(!lease||!navigator.onLine)return;try{await initFirebase();const result=await callRssFunction('getDeviceStatus',{storeId:lease.storeId,deviceId:POS_DEVICE_ID});if(result.status!=='active'){localStorage.removeItem('ronyalDeviceLease');showDeviceBlockedScreen();return}lease.employeeId=result.employeeId;lease.name=result.employee.name||lease.name;lease.employeeRole=result.employee.role||lease.employeeRole;lease.permissions=result.employee.permissions||{};lease.expiresAt=Date.now()+7*24*60*60*1000;localStorage.setItem('ronyalDeviceLease',JSON.stringify(lease));sessionStorage.setItem('ronyalPermissions',JSON.stringify(lease.permissions));sessionStorage.setItem('ronyalEmployeeRole',lease.employeeRole);if(!canAccessView(view))view='dashboard';await render()}catch(e){if(['functions/not-found','functions/permission-denied','functions/failed-precondition'].includes(e.code)){localStorage.removeItem('ronyalDeviceLease');showDeviceBlockedScreen()}}}
