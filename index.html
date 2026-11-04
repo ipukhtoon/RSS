@@ -1385,7 +1385,7 @@ const DEVICE_KEY_DB='ronyal_device_identity_v1';
      return {kind:'web',publicKey:bytesToBase64Url(new Uint8Array(spki)),pair,hardwareBacked:false};
    }finally{idb.close()}
  }
- function bytesToBase64Url(bytes){let binary='';for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);return btoa(binary).replace(/\\+/g,'-').replace(/\\//g,'_').replace(/=+$/,'')}
+ function bytesToBase64Url(bytes){let binary='';for(let i=0;i<bytes.length;i++)binary+=String.fromCharCode(bytes[i]);return btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'')}
  async function signDeviceChallenge(identity,challenge){
    if(identity.kind==='native'){const result=await window.RonyalDeviceIdentity.signChallenge(challenge);return result.signature}
    const signature=await crypto.subtle.sign({name:'ECDSA',hash:'SHA-256'},identity.pair.privateKey,new TextEncoder().encode(challenge));
