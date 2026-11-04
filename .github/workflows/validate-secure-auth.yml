@@ -62,6 +62,7 @@ jobs:
           ];
           const requiredClient = [
             'window.RonyalDeviceIdentity',
+            'ensureDeviceIdentityEnrolled(storeId)',
             'createDeviceProof(storeId,\'claim\',true)',
             'createDeviceProof(code.split(\'.\')[0],\'register\',true)',
             'createDeviceProof(recoveryStoreId,\'recovery\',true)',
