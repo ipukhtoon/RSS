@@ -122,6 +122,7 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
     }
     const existing = await tx.get(deviceRef);
     if (existing.exists && existing.data().authUid !== uid) throw new HttpsError("already-exists", "This device record belongs to another sign-in.");
+    if (existing.exists && existing.data().status === "active") throw new HttpsError("failed-precondition", "This installation is already authorized. No new registration is needed.");
     tx.update(inviteRef, { used: true, usedAt: admin.firestore.FieldValue.serverTimestamp(), usedBy: uid });
     tx.set(deviceRef, {
       deviceId: installationId, installationId, authUid: uid,
