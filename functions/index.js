@@ -52,12 +52,12 @@ exports.beginDeviceChallenge = onCall({ region: REGION }, async (request) => {
   storeId = validStoreId(storeId);
   const deviceId = cleanText(request.data?.deviceId, 100);
   if (!/^[A-Za-z0-9_-]{12,100}$/.test(deviceId) ||
-      !["claim","register","recovery","status","owner"].includes(purpose)) {
+      !["claim","register","recovery","enroll","status","owner"].includes(purpose)) {
     throw new HttpsError("invalid-argument", "Invalid device challenge request.");
   }
   let publicKey = "";
   const storeRef = stores().doc(storeId);
-  if (["claim","register","recovery"].includes(purpose)) {
+  if (["claim","register","recovery","enroll"].includes(purpose)) {
     publicKey = cleanText(request.data?.publicKey, 1000);
     if (!publicKey) throw new HttpsError("invalid-argument", "The device public key is missing.");
     try {
@@ -72,6 +72,18 @@ exports.beginDeviceChallenge = onCall({ region: REGION }, async (request) => {
       throw new HttpsError("permission-denied", "This device has no registered secure identity.");
     }
     publicKey = deviceSnap.data().publicKey;
+  }
+  if (purpose === "enroll") {
+    const existing = await storeRef.collection("devices").doc(deviceId).get();
+    if (!existing.exists || existing.data().authUid !== uid ||
+        !["active","pending"].includes(existing.data().status)) {
+      throw new HttpsError("permission-denied", "Only your already-registered device can complete secure identity migration.");
+    }
+    const registeredKey = cleanText(existing.data().publicKey, 1000);
+    if (registeredKey && registeredKey !== publicKey) {
+      throw new HttpsError("already-exists", "This installation is already bound to a different secure identity.");
+    }
+    if (registeredKey === publicKey) return { alreadyEnrolled: true, storeId };
   }
   const challenge = b64url(crypto.randomBytes(32));
   const challengeId = b64url(crypto.randomBytes(18));
@@ -126,6 +138,23 @@ const verifyDeviceProof = async (request, storeId, deviceId, purpose, allowEnrol
   return { uid, publicKey: cleanText(proof.publicKey, 1000) };
 };
 
+
+exports.enrollDeviceIdentity = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request);
+  const storeId = validStoreId(request.data?.storeId);
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  if (!/^[A-Za-z0-9_-]{12,100}$/.test(deviceId)) throw new HttpsError("invalid-argument", "The installation ID is invalid.");
+  const proof = await verifyDeviceProof(request, storeId, deviceId, "enroll", true);
+  const ref = stores().doc(storeId).collection("devices").doc(deviceId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data().authUid !== uid || !["active","pending"].includes(snap.data().status)) {
+    throw new HttpsError("permission-denied", "This device is not eligible for secure identity migration.");
+  }
+  const existingKey = cleanText(snap.data().publicKey, 1000);
+  if (existingKey && existingKey !== proof.publicKey) throw new HttpsError("already-exists", "This device is already bound to a different secure identity.");
+  if (!existingKey) await ref.update({ publicKey: proof.publicKey, identityEnrolledAt: admin.firestore.FieldValue.serverTimestamp() });
+  return { ok: true, alreadyEnrolled: !!existingKey };
+});
 
 exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
