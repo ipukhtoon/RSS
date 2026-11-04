@@ -6,7 +6,7 @@ This backend is designed to preserve the existing database path:
 ## Important migration behavior
 
 - Do not delete, rename, or recreate the existing `ronyal_pos` document or any of its data collections.
-- On the original owner installation, link the current Firebase anonymous user to the owner's email/password account using Firebase Authentication `linkWithCredential`. Linking preserves that Firebase UID.
+- On the original owner installation, link the current Firebase anonymous user to the owner's email/password account using Firebase Authentication `linkWithCredential`. Linking preserves that Firebase UID. If the owner email already belongs to an existing Firebase account, the app signs in with that account instead; the existing `/stores/{storeId}/ronyal_pos` data path remains unchanged even though the owner UID differs.
 - Verify the owner email, refresh the ID token, then call `claimExistingStore` with the already-saved Store Sync ID and installation ID.
 - The function writes owner/device metadata at `/stores/{storeId}`, outside the existing POS data path.
 - The function returns a short-lived Firebase custom-auth sign-in token carrying the store ID and installation ID as claims. Firestore rules require these claims and an active device record, so an owner password alone does not reuse an old device session.
