@@ -2,36 +2,42 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     function signedIn() { return request.auth != null; }
-    function storePath(storeId) { return /databases/$(database)/documents/stores/$(storeId); }
-    function devicePath(storeId) { return /databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid); }
-    function isOwner(storeId) {
-      return signedIn() && exists(storePath(storeId)) &&
-        get(storePath(storeId)).data.ownerUid == request.auth.uid;
+    function storeDocPath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId);
     }
-    function deviceRecord(storeId) {
-      return get(/databases/$(database)/documents/stores/$(storeId)/devices/$(get(devicePath(storeId)).data.deviceId));
+    function deviceDocPath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.token.rssDeviceId);
     }
     function hasActiveDevice(storeId) {
       return signedIn() &&
-        exists(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)) &&
-        get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.authUid == request.auth.uid &&
-        get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.status == 'active';
+        request.auth.token.rssStoreId == storeId &&
+        request.auth.token.rssDeviceId is string &&
+        exists(deviceDocPath(storeId)) &&
+        get(deviceDocPath(storeId)).data.authUid == request.auth.uid &&
+        get(deviceDocPath(storeId)).data.status == 'active';
     }
-    function memberEmployee(storeId) {
-      return get(/databases/$(database)/documents/stores/$(storeId)/employees/$(get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.employeeId));
+    function employeeDocPath(storeId) {
+      return /databases/$(database)/documents/stores/$(storeId)/employees/$(get(deviceDocPath(storeId)).data.employeeId);
     }
     function activeMember(storeId) {
-      return isOwner(storeId) ||
-        (hasActiveDevice(storeId) &&
-         memberEmployee(storeId).data.status == 'active');
+      return hasActiveDevice(storeId) &&
+        exists(employeeDocPath(storeId)) &&
+        get(employeeDocPath(storeId)).data.status == 'active';
+    }
+    function isOwner(storeId) {
+      return activeMember(storeId) &&
+        get(storeDocPath(storeId)).data.ownerUid == request.auth.uid &&
+        get(employeeDocPath(storeId)).data.role == 'owner';
     }
     function canRead(storeId, permission) {
       return isOwner(storeId) ||
-        (activeMember(storeId) && memberEmployee(storeId).data.permissions[permission] == true);
+        (activeMember(storeId) &&
+         get(employeeDocPath(storeId)).data.permissions[permission] == true);
     }
     function canWrite(storeId, permission) {
       return isOwner(storeId) ||
-        (activeMember(storeId) && memberEmployee(storeId).data.permissions[permission] == true);
+        (activeMember(storeId) &&
+         get(employeeDocPath(storeId)).data.permissions[permission] == true);
     }
 
     match /stores/{storeId} {
@@ -42,15 +48,15 @@ service cloud.firestore {
       match /employees/{employeeId} {
         allow read: if isOwner(storeId) ||
           (activeMember(storeId) &&
-           get(/databases/$(database)/documents/stores/$(storeId)/devices/$(request.auth.uid)).data.employeeId == employeeId);
+           get(deviceDocPath(storeId)).data.employeeId == employeeId);
         allow create, update, delete: if isOwner(storeId);
       }
 
       match /devices/{deviceId} {
         allow read: if isOwner(storeId) ||
-          (signedIn() && deviceId == request.auth.uid &&
-           resource.data.authUid == request.auth.uid);
-        // Device registration, approval and revocation are callable Functions only.
+          (hasActiveDevice(storeId) &&
+           deviceId == request.auth.token.rssDeviceId);
+        // Registration, approval and revocation are callable Functions only.
         allow create, update, delete: if false;
       }
 
@@ -58,10 +64,10 @@ service cloud.firestore {
         allow read, write: if false;
       }
 
-      match /ronyal_pos/{docId} {
+      match /ronyal_pos/{rootDocId} {
         allow read: if activeMember(storeId);
         allow create, update: if isOwner(storeId) ||
-          (docId == 'root' && activeMember(storeId) &&
+          (rootDocId == 'root' && activeMember(storeId) &&
            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['connectionTest']));
         allow delete: if isOwner(storeId);
 
