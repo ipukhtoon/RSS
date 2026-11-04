@@ -1400,9 +1400,20 @@ const DEVICE_KEY_DB='ronyal_device_identity_v1';
    return {challengeId:challenge.challengeId,challenge:challenge.challenge,signature,...(enrollment?{publicKey:identity.publicKey}:{})};
  }
  const OWNER_PROOF_FUNCTIONS=new Set(['createDeviceInvite','approveDevice','revokeDevice','assignDevice','renameDevice','createEmployee','updateEmployee','setEmployeeStatus','deleteEmployee']);
+ async function ensureDeviceIdentityEnrolled(storeId){
+   const identity=await getDeviceIdentity();
+   const request={storeId,deviceId:POS_DEVICE_ID,purpose:'enroll',publicKey:identity.publicKey};
+   const challenge=await withFirebaseTimeout(firebaseApp.functions('asia-south1').httpsCallable('beginDeviceChallenge')(request),20000,'beginDeviceChallenge').then(r=>r.data);
+   if(challenge?.alreadyEnrolled)return true;
+   const signature=await signDeviceChallenge(identity,challenge.challenge);
+   const deviceProof={challengeId:challenge.challengeId,challenge:challenge.challenge,signature,publicKey:identity.publicKey};
+   await withFirebaseTimeout(firebaseApp.functions('asia-south1').httpsCallable('enrollDeviceIdentity')({storeId,deviceId:POS_DEVICE_ID,deviceProof}),20000,'enrollDeviceIdentity');
+   return true;
+ }
  async function callRssFunction(name,payload={}){
    if(!firebaseApp||!firebaseApp.functions)throw new Error('Firebase Functions SDK is unavailable. Reload the app with internet access.');
    const data={...payload},storeId=data.storeId||getStoreSyncId();
+   if(name==='getDeviceStatus'||OWNER_PROOF_FUNCTIONS.has(name))await ensureDeviceIdentityEnrolled(storeId);
    if(name==='getDeviceStatus')data.deviceProof=await createDeviceProof(storeId,'status',false);
    else if(OWNER_PROOF_FUNCTIONS.has(name))data.deviceProof=await createDeviceProof(storeId,'owner',false);
    return withFirebaseTimeout(firebaseApp.functions('asia-south1').httpsCallable(name)(data),20000,name).then(r=>r.data)
