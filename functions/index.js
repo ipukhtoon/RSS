@@ -11,13 +11,15 @@ const requireAuth = (request) => {
   if (!request.auth || !request.auth.uid) throw new HttpsError("unauthenticated", "Sign in before continuing.");
   return request.auth.uid;
 };
-const requireOwner = async (storeId, uid) => {
-  const ref = stores().doc(storeId);
-  const snap = await ref.get();
-  if (!snap.exists || snap.data().ownerUid !== uid) {
-    throw new HttpsError("permission-denied", "Only this store's verified owner can perform this action.");
-  }
-  return { ref, data: snap.data() };
+const issueSessionToken = (uid, storeId, deviceId) => admin.auth().createCustomToken(uid, { rssStoreId: storeId, rssDeviceId: deviceId });
+const requireOwner = async (storeId, uid, token) => {
+  const deviceId = cleanText(token && token.rssDeviceId, 100);
+  if (!token || token.rssStoreId !== storeId || !deviceId) throw new HttpsError('permission-denied', 'This device has no active owner session.');
+  const ref = stores().doc(storeId), deviceRef = ref.collection('devices').doc(deviceId);
+  const results = await Promise.all([ref.get(), deviceRef.get()]);
+  const snap = results[0], deviceSnap = results[1];
+  if (!snap.exists || snap.data().ownerUid !== uid || !deviceSnap.exists || deviceSnap.data().authUid !== uid || deviceSnap.data().status !== 'active' || deviceSnap.data().role !== 'owner') throw new HttpsError('permission-denied', 'Only an approved owner device can perform this action.');
+  return { ref, data: snap.data(), deviceId };
 };
 const validStoreId = (value) => {
   const id = cleanText(value, 100);
