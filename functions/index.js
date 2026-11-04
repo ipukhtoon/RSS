@@ -110,8 +110,8 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
   const raw = split[1];
   if (!/^[A-Za-z0-9_-]{30,80}$/.test(raw)) throw new HttpsError("invalid-argument", "The activation code is invalid.");
   const inviteRef = stores().doc(storeId).collection("deviceInvites").doc(hashCode(raw));
-  const deviceRef = stores().doc(storeId).collection("devices").doc(installationId);
   const installationId = cleanText(request.data?.deviceId, 100);
+  const deviceRef = stores().doc(storeId).collection("devices").doc(installationId);
   if (!/^[a-zA-Z0-9_-]{12,100}$/.test(installationId)) throw new HttpsError("invalid-argument", "The installation ID is invalid.");
   await db.runTransaction(async (tx) => {
     const inviteSnap = await tx.get(inviteRef);
