@@ -33,8 +33,8 @@ const hashCode = (code) => crypto.createHash("sha256").update(code).digest("hex"
 exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const email = cleanText(request.auth.token.email, 254).toLowerCase();
-  if (!email || request.auth.token.email_verified !== true) {
-    throw new HttpsError("failed-precondition", "Verify the owner email address before claiming this existing store.");
+  if (!email || request.auth.token.email_verified !== true || request.auth.token.firebase?.sign_in_provider !== "password") {
+    throw new HttpsError("failed-precondition", "Sign in with the verified owner email and password before claiming this existing store.");
   }
   const storeId = validStoreId(request.data?.storeId);
   const deviceId = cleanText(request.data?.deviceId, 100);
@@ -43,6 +43,11 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
   }
   const storeName = cleanText(request.data?.storeName, 100) || "Ronyal Super Store";
   const storeRef = stores().doc(storeId);
+  const legacyCollections = ["products","sales","expenses","customers","suppliers","purchases","creditPayments","returns"];
+  const legacyChecks = await Promise.all(legacyCollections.map(name => storeRef.collection("ronyal_pos").doc("root").collection(name).limit(1).get()));
+  if (!legacyChecks.some(snapshot => !snapshot.empty)) {
+    throw new HttpsError("failed-precondition", "No existing POS cloud records were found under this Store ID. Reconnect and sync the original owner installation first. The function will not claim an empty or newly invented Store ID.");
+  }
   const employeeId = "owner-" + uid;
   const deviceRef = storeRef.collection("devices").doc(deviceId);
   const employeeRef = storeRef.collection("employees").doc(employeeId);
