@@ -263,7 +263,7 @@ exports.revokeDevice = onCall({ region: REGION }, async (request) => {
   const storeId = validStoreId(request.data?.storeId);
   const deviceId = cleanText(request.data?.deviceId, 100);
   if (!deviceId || deviceId === request.auth.token.rssDeviceId) throw new HttpsError("invalid-argument", "Choose another device. The current owner device cannot revoke itself.");
-  await requireOwner(storeId, uid, request.auth.token);
+  await requireOwner(storeId, uid, request.auth.token, request);
   const ref = stores().doc(storeId).collection("devices").doc(deviceId);
   const snap = await ref.get();
   if (!snap.exists) throw new HttpsError("not-found", "Device not found.");
@@ -313,7 +313,7 @@ exports.assignDevice = onCall({ region: REGION }, async (request) => {
   const deviceId = cleanText(request.data?.deviceId, 100);
   const employeeId = cleanText(request.data?.employeeId, 128);
   if (!deviceId || !employeeId) throw new HttpsError("invalid-argument", "Choose a device and employee.");
-  await requireOwner(storeId, uid, request.auth.token);
+  await requireOwner(storeId, uid, request.auth.token, request);
   const storeRef = stores().doc(storeId), deviceRef = storeRef.collection("devices").doc(deviceId), employeeRef = storeRef.collection("employees").doc(employeeId);
   const results = await Promise.all([deviceRef.get(), employeeRef.get()]);
   const device = results[0], employee = results[1];
@@ -329,7 +329,7 @@ exports.renameDevice = onCall({ region: REGION }, async (request) => {
   const deviceId = cleanText(request.data?.deviceId, 100);
   const deviceName = cleanText(request.data?.deviceName, 80);
   if (!deviceId || !deviceName) throw new HttpsError("invalid-argument", "Enter a device name.");
-  await requireOwner(storeId, uid, request.auth.token);
+  await requireOwner(storeId, uid, request.auth.token, request);
   const ref = stores().doc(storeId).collection("devices").doc(deviceId);
   const snap = await ref.get();
   if (!snap.exists) throw new HttpsError("not-found", "Device not found.");
