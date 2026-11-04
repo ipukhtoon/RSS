@@ -42,7 +42,7 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
   const storeName = cleanText(request.data?.storeName, 100) || "Ronyal Super Store";
   const storeRef = stores().doc(storeId);
   const employeeId = "owner-" + uid;
-  const deviceRef = storeRef.collection("devices").doc(uid);
+  const deviceRef = storeRef.collection("devices").doc(deviceId);
   const employeeRef = storeRef.collection("employees").doc(employeeId);
   await db.runTransaction(async (tx) => {
     const [storeSnap, deviceSnap] = await Promise.all([tx.get(storeRef), tx.get(deviceRef)]);
@@ -70,23 +70,24 @@ exports.claimExistingStore = onCall({ region: REGION }, async (request) => {
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
     tx.set(deviceRef, {
-      deviceId: uid,
+      deviceId,
       installationId: deviceId,
       authUid: uid,
       employeeId,
+      role: "owner",
       deviceName: cleanText(request.data?.deviceName, 80) || "Owner device",
       status: "active",
       registeredAt: admin.firestore.FieldValue.serverTimestamp(),
       lastSeen: admin.firestore.FieldValue.serverTimestamp()
     }, { merge: true });
   });
-  return { ok: true, storeId, employeeId, role: "owner" };
+  return { ok: true, storeId, employeeId, role: "owner", customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
 
 exports.createDeviceInvite = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const storeId = validStoreId(request.data?.storeId);
-  await requireOwner(storeId, uid);
+  await requireOwner(storeId, uid, request.auth.token);
   const raw = crypto.randomBytes(24).toString("base64url");
   const inviteId = hashCode(raw);
   const expiresAt = admin.firestore.Timestamp.fromMillis(Date.now() + 15 * 60 * 1000);
@@ -131,12 +132,12 @@ exports.registerDevice = onCall({ region: REGION }, async (request) => {
 exports.approveDevice = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const storeId = validStoreId(request.data?.storeId);
-  const deviceUid = cleanText(request.data?.deviceUid, 128);
+  const deviceId = cleanText(request.data?.deviceId, 100);
   const employeeId = cleanText(request.data?.employeeId, 128);
-  if (!deviceUid || !employeeId) throw new HttpsError("invalid-argument", "Choose a pending device and an employee.");
-  await requireOwner(storeId, uid);
+  if (!deviceId || !employeeId) throw new HttpsError("invalid-argument", "Choose a pending device and an employee.");
+  await requireOwner(storeId, uid, request.auth.token);
   const storeRef = stores().doc(storeId);
-  const deviceRef = storeRef.collection("devices").doc(deviceUid);
+  const deviceRef = storeRef.collection("devices").doc(deviceId);
   const employeeRef = storeRef.collection("employees").doc(employeeId);
   await db.runTransaction(async (tx) => {
     const [deviceSnap, employeeSnap] = await Promise.all([tx.get(deviceRef), tx.get(employeeRef)]);
@@ -150,13 +151,40 @@ exports.approveDevice = onCall({ region: REGION }, async (request) => {
 exports.revokeDevice = onCall({ region: REGION }, async (request) => {
   const uid = requireAuth(request);
   const storeId = validStoreId(request.data?.storeId);
-  const deviceUid = cleanText(request.data?.deviceUid, 128);
-  if (!deviceUid || deviceUid === uid) throw new HttpsError("invalid-argument", "Choose another device. The current owner device cannot revoke itself.");
-  await requireOwner(storeId, uid);
-  const ref = stores().doc(storeId).collection("devices").doc(deviceUid);
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  if (!deviceId) throw new HttpsError("invalid-argument", "Choose another device. The current owner device cannot revoke itself.");
+  await requireOwner(storeId, uid, request.auth.token);
+  const ref = stores().doc(storeId).collection("devices").doc(deviceId);
   const snap = await ref.get();
   if (!snap.exists) throw new HttpsError("not-found", "Device not found.");
   await ref.update({ status: "revoked", revokedAt: admin.firestore.FieldValue.serverTimestamp(), revokedBy: uid });
-  try { await admin.auth().revokeRefreshTokens(deviceUid); } catch (_) { /* Rules deny the device immediately even if token revocation is unavailable. */ }
   return { ok: true };
+});
+
+exports.getDeviceStatus = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request);
+  const storeId = validStoreId(request.data?.storeId);
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  if (!deviceId) throw new HttpsError("invalid-argument", "The installation ID is missing.");
+  const ref = stores().doc(storeId).collection("devices").doc(deviceId);
+  const snap = await ref.get();
+  if (!snap.exists || snap.data().authUid !== uid) throw new HttpsError("not-found", "This installation has not been registered for this store.");
+  const data = snap.data();
+  if (data.status !== "active") return { status: data.status || "pending" };
+  await ref.update({ lastSeen: admin.firestore.FieldValue.serverTimestamp() });
+  return { status: "active", employeeId: data.employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
+});
+
+exports.registerOwnerRecoveryDevice = onCall({ region: REGION }, async (request) => {
+  const uid = requireAuth(request);
+  if (!request.auth.token.email || request.auth.token.email_verified !== true) throw new HttpsError("failed-precondition", "Sign in with the original verified owner email account.");
+  const deviceId = cleanText(request.data?.deviceId, 100);
+  if (!/^[a-zA-Z0-9_-]{12,100}$/.test(deviceId)) throw new HttpsError("invalid-argument", "The installation ID is invalid.");
+  const owned = await stores().where("ownerUid", "==", uid).limit(2).get();
+  if (owned.empty) throw new HttpsError("not-found", "No existing Ronyal store is linked to this owner account.");
+  if (owned.size > 1) throw new HttpsError("failed-precondition", "More than one store is linked to this account. Contact support to select the correct store.");
+  const storeDoc = owned.docs[0], storeId = storeDoc.id, employeeId = "owner-" + uid;
+  const deviceRef = storeDoc.ref.collection("devices").doc(deviceId);
+  await deviceRef.set({ deviceId, installationId: deviceId, authUid: uid, employeeId, role: "owner", deviceName: cleanText(request.data?.deviceName, 80) || "Owner recovery device", status: "active", recoveryActivatedAt: admin.firestore.FieldValue.serverTimestamp(), registeredAt: admin.firestore.FieldValue.serverTimestamp(), lastSeen: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
+  return { ok: true, storeId, employeeId, customToken: await issueSessionToken(uid, storeId, deviceId) };
 });
