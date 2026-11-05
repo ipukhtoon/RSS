@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - feature/secure-auth-performance
 
 jobs:
   windows:
@@ -113,13 +112,6 @@ jobs:
               Native.saveFile(options),
             pickFile: (options = {}) =>
               Native.pickFile(options)
-          };
-
-          // Android Keystore-backed installation identity. The private key never
-          // enters JavaScript; JS receives only the public key and signatures.
-          window.RonyalDeviceIdentity = {
-            getIdentity: () => Native.getDeviceIdentity(),
-            signChallenge: (challenge) => Native.signDeviceChallenge({ challenge })
           };
 
           window.RonyalApp = {
@@ -308,7 +300,6 @@ jobs:
           grep -q 'window.RonyalBarcodeScanner' www/index.html
           grep -q 'window.RonyalPrinter' www/index.html
           grep -q 'window.RonyalFiles' www/index.html
-          grep -q 'window.RonyalDeviceIdentity' www/index.html
 
           test -s "$JAVA_DIR/RonyalPrintPlugin.java"
 
