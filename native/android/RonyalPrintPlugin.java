@@ -13,8 +13,6 @@ import android.print.PrintJob;
 import android.print.PrintManager;
 import android.util.Base64;
 import android.webkit.WebView;
-import android.security.keystore.KeyGenParameterSpec;
-import android.security.keystore.KeyProperties;
 import androidx.activity.result.ActivityResult;
 import com.getcapacitor.JSObject;
 import com.getcapacitor.Plugin;
@@ -31,97 +29,12 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.nio.charset.StandardCharsets;
-import java.security.KeyPairGenerator;
-import java.security.KeyFactory;
-import java.security.KeyPair;
-import java.security.KeyStore;
-import java.security.Signature;
-import java.security.spec.ECGenParameterSpec;
-import java.security.spec.KeySpec;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 
 @CapacitorPlugin(name = "RonyalPrint")
 public class RonyalPrintPlugin extends Plugin {
     private static final int MAX_IMPORT_BYTES = 25 * 1024 * 1024;
-    private static final String DEVICE_KEY_ALIAS = "com.ronyal.superstore.device.identity.v1";
     private static final String TEMP_PATH_KEY = "_ronyalFileTempPath";
     private static final String TEMP_LENGTH_KEY = "_ronyalFileExpectedLength";
-
-
-    /**
-     * Returns a stable per-installation EC public key. The private key never leaves
-     * Android Keystore and is not included in Android backups.
-     */
-    @PluginMethod
-    public void getDeviceIdentity(PluginCall call) {
-        try {
-            KeyPair pair = getOrCreateDeviceKeyPair();
-            JSObject result = new JSObject();
-            result.put("algorithm", "ECDSA_P256_SHA256");
-            result.put("publicKey", Base64.encodeToString(pair.getPublic().getEncoded(), Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING));
-            result.put("hardwareBacked", isDeviceKeyHardwareBacked());
-            call.resolve(result);
-        } catch (Exception e) {
-            call.reject("Could not access the secure device identity: " + safeMessage(e), e);
-        }
-    }
-
-    /** Signs a server-provided, one-time challenge without exporting the private key. */
-    @PluginMethod
-    public void signDeviceChallenge(PluginCall call) {
-        String challenge = call.getString("challenge");
-        if (challenge == null || challenge.isEmpty() || challenge.length() > 2048) {
-            call.reject("A valid device challenge is required.");
-            return;
-        }
-        try {
-            KeyPair pair = getOrCreateDeviceKeyPair();
-            Signature signer = Signature.getInstance("SHA256withECDSA");
-            signer.initSign(pair.getPrivate());
-            signer.update(challenge.getBytes(StandardCharsets.UTF_8));
-            byte[] signature = signer.sign();
-            JSObject result = new JSObject();
-            result.put("signature", Base64.encodeToString(signature, Base64.URL_SAFE | Base64.NO_WRAP | Base64.NO_PADDING));
-            call.resolve(result);
-        } catch (Exception e) {
-            call.reject("Could not sign the device challenge: " + safeMessage(e), e);
-        }
-    }
-
-    private java.security.KeyPair getOrCreateDeviceKeyPair() throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-        keyStore.load(null);
-        if (keyStore.containsAlias(DEVICE_KEY_ALIAS)) {
-            PrivateKey privateKey = (PrivateKey) keyStore.getKey(DEVICE_KEY_ALIAS, null);
-            PublicKey publicKey = keyStore.getCertificate(DEVICE_KEY_ALIAS).getPublicKey();
-            return new java.security.KeyPair(publicKey, privateKey);
-        }
-        KeyPairGenerator generator = KeyPairGenerator.getInstance(KeyProperties.KEY_ALGORITHM_EC, "AndroidKeyStore");
-        KeyGenParameterSpec spec = new KeyGenParameterSpec.Builder(
-                DEVICE_KEY_ALIAS,
-                KeyProperties.PURPOSE_SIGN | KeyProperties.PURPOSE_VERIFY
-        ).setAlgorithmParameterSpec(new ECGenParameterSpec("secp256r1"))
-         .setDigests(KeyProperties.DIGEST_SHA256)
-         .setUserAuthenticationRequired(false)
-         .build();
-        generator.initialize(spec);
-        return generator.generateKeyPair();
-    }
-
-    private boolean isDeviceKeyHardwareBacked() {
-        try {
-            KeyStore keyStore = KeyStore.getInstance("AndroidKeyStore");
-            keyStore.load(null);
-            PrivateKey key = (PrivateKey) keyStore.getKey(DEVICE_KEY_ALIAS, null);
-            java.security.spec.KeySpec spec = KeyFactory.getInstance(key.getAlgorithm(), "AndroidKeyStore")
-                    .getKeySpec(key, android.security.keystore.KeyInfo.class);
-            if (spec instanceof android.security.keystore.KeyInfo) {
-                return ((android.security.keystore.KeyInfo) spec).isInsideSecureHardware();
-            }
-        } catch (Exception ignored) { }
-        return false;
-    }
 
     @PluginMethod
     public void getPrintStatus(PluginCall call) {
