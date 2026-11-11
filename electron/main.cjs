@@ -4,7 +4,7 @@ const path = require('path');
 function createWindow() {
   const iconPath = process.platform === 'win32'
     ? path.join(__dirname, '..', 'icon.ico')
-    : path.join(__dirname, '..', 'ronyal-logo.png');
+    : path.join(__dirname, '..', 'ronyal-logo-receipt.png');
 
   const win = new BrowserWindow({
     width: 1200,
