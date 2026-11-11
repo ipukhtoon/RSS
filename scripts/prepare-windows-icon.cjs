@@ -4,7 +4,7 @@ const pngToIco = require('png-to-ico');
 
 (async () => {
   const root = path.resolve(__dirname, '..');
-  const candidates = ['ronyal-logo.png', 'ronyal-logo-receipt.png'];
+  const candidates = ['ronyal-logo-receipt.png', 'ronyal-logo.png'];
   let source = null;
 
   for (const name of candidates) {
