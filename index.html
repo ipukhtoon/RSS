@@ -908,8 +908,8 @@ function bindPurchaseForm(){
  [packs,loose,cost].forEach(el=>el.addEventListener('input',update));
  async function savePurchase(f,p,priceChoice,customPrices){
   const pieceOnly=p.saleMode==='piece',packQty=pieceOnly?0:Number(f.get('packs')),looseQty=Number(f.get('loosePieces')),enteredCost=Number(f.get('costPack')),size=Math.max(1,Number(p.packSize)||1);
-  if(!Number.isInteger(packQty)||packQty<0||!Number.isInteger(looseQty)||looseQty<0||(pieceOnly?looseQty===0:packQty+looseQty===0)){toast(pieceOnly?'Enter a valid number of pieces to restock.':'Enter a valid quantity of at least one pack or piece.');return false}
-  if(!Number.isFinite(enteredCost)||enteredCost<0){toast(pieceOnly?'Enter a valid purchase cost per piece.':'Enter a valid purchase cost per pack.');return false}
+  if(!Number.isInteger(packQty)||packQty<0||!Number.isInteger(looseQty)||looseQty<0||(pieceOnly?looseQty===0:packQty+looseQty===0)){toast(pieceOnly?'Enter a valid number of pieces to restock.':'Enter a valid quantity of at least one pack or piece.');unlockPurchase();return false}
+  if(!Number.isFinite(enteredCost)||enteredCost<0){toast(pieceOnly?'Enter a valid purchase cost per piece.':'Enter a valid purchase cost per pack.');unlockPurchase();return false}
   const cp=pieceOnly?enteredCost*size:enteredCost,added=pieceOnly?looseQty:packQty*size+looseQty,total=pieceOnly?enteredCost*looseQty:cp*packQty+(cp/size)*looseQty;
   const record={id:uid(),productId:p.id,productName:p.name,sku:p.sku||'',saleMode:p.saleMode|| (p.piecePriceEntered===false?'pack':'both'),packSize:size,packs:packQty,loosePieces:looseQty,addedPieces:added,costPack:cp,costPerPiece:pieceOnly?enteredCost:cp/size,totalCost:total,supplier:String(f.get('supplier')||'').trim(),invoice:String(f.get('invoice')||'').trim(),date:String(f.get('date')||today()),expiry:String(f.get('expiry')||''),notes:String(f.get('notes')||'').trim(),createdAt:new Date().toISOString()};
   ensureProductBatches(p);const newBatch={id:uid(),qty:added,expiry:record.expiry,costPerPiece:pieceOnly?enteredCost:cp/size,receivedAt:record.createdAt,purchaseId:record.id};
