@@ -8,9 +8,10 @@
   "theme_color": "#24110d",
   "icons": [
     {
-      "src": "https://raw.githubusercontent.com/ipukhtoon/RSS/main/icon.png",
-      "sizes": "192x192",
-      "type": "image/png"
+      "src": "./ronyal-logo.png",
+      "sizes": "any",
+      "type": "image/png",
+      "purpose": "any maskable"
     }
   ]
 }
