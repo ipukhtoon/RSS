@@ -250,3 +250,9 @@ test('recent credit sale receipt action is right-aligned on mobile', () => {
   assert.match(html,/credit-sales-mobile-cards/);
   assert.match(html,/\.credit-sales-mobile-cards \.record-card-actions\{justify-content:flex-end!important\}/);
 });
+
+
+test('customer ledger statement terminates before mounting the ledger modal', () => {
+  assert.match(html,/\.map\(item=>item\.row\)\.join\(''\);mount\.innerHTML=/);
+  assert.doesNotMatch(html,/\.map\(item=>item\.row\)\.join\(''\)mount\.innerHTML=/);
+});
