@@ -52,6 +52,10 @@ test('checkout shows a non-blocking below-cost warning', () => {
   assert.match(html, /batchUnitCostForQuantity\(p,units\)\*units/);
 });
 
+test('Data Health ignores products without batch tracking but still detects tracked mismatches', () => {
+  assert.match(html, /if\(bs\.length&&sum!==stock\)add\('Stock \/ batch mismatch'/);
+});
+
 test('Data Health is read-only and includes requested diagnostics', () => {
   assert.match(html, /async function dataHealthPage\(\)/);
   for (const label of ['Duplicate sale reversal', 'Stock \/ batch mismatch', 'Batch cost outlier', 'Sale below cost']) {
