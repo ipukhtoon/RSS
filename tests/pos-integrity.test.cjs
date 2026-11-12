@@ -59,3 +59,48 @@ test('Data Health is read-only and includes requested diagnostics', () => {
   }
   assert.match(html, /no automatic corrections/i);
 });
+
+test('receipt prices are grouped in first-seen order and validated against line total', () => {
+  const vm = require('node:vm');
+  const start = html.indexOf('function receiptPriceGroups(item){');
+  const end = html.indexOf('function receiptPriceSubline(item){', start);
+  assert.ok(start >= 0 && end > start, 'receipt grouping helper exists');
+  const source = html.slice(start, end);
+  const warnings = [];
+  const context = { console: { warn: (...args) => warnings.push(args) } };
+  vm.runInNewContext(source + ';this.group=receiptPriceGroups;', context);
+  const single = context.group({qty:1,price:100,lineTotal:100,unitPrices:[100]});
+  assert.deepEqual(JSON.parse(JSON.stringify(single.groups)), [{count:1,price:100}]);
+  assert.equal(single.show, false);
+  const mixed = context.group({qty:4,price:100,lineTotal:410,unitPrices:[100,100,100,110]});
+  assert.deepEqual(JSON.parse(JSON.stringify(mixed.groups)), [{count:3,price:100},{count:1,price:110}]);
+  const pack = context.group({qty:2,unitType:'pack',price:300,lineTotal:600,unitPrices:[300,300]});
+  assert.equal(pack.isPack, true);
+  assert.equal(pack.show, true);
+  const legacy = context.group({qty:3,price:25,lineTotal:75});
+  assert.deepEqual(JSON.parse(JSON.stringify(legacy.groups)), [{count:3,price:25}]);
+  const mismatch = context.group({qty:2,price:50,lineTotal:120,unitPrices:[50,50]});
+  assert.equal(mismatch, null);
+  assert.equal(warnings.length, 1);
+});
+
+test('receipt uses grouped muted sub-lines and unit labels for piece and pack quantities', () => {
+  assert.match(html, /receiptPriceSubline\(i\)/);
+  assert.match(html, /i\.unitType==='pack'\?'pack':'pc'/);
+  assert.match(html, /receipt-price-breakdown/);
+  assert.doesNotMatch(html, /Prices: \$\{prices\.map/);
+});
+
+test('remaining batch cost correction is owner-gated, audited and excludes zero-quantity batches', () => {
+  const start = html.indexOf('async function editRemainingBatchCosts(productId){');
+  const end = html.indexOf('function normalizeProductName', start);
+  assert.ok(start >= 0 && end > start);
+  const source = html.slice(start, end);
+  assert.match(source, /requireOwnerAccess\('correct remaining stock batch costs'\)/);
+  assert.match(source, /product\.batches\.filter\(b=>Number\(b\.qty\)>0\)/);
+  assert.match(source, /costAudit\.push/);
+  assert.match(source, /previousCostPerPiece/);
+  assert.match(source, /newCostPerPiece/);
+  assert.match(source, /Historical sale costs were not changed/);
+  assert.doesNotMatch(source, /put\('sales'/);
+});
