@@ -154,3 +154,13 @@ test('final mobile alignment keeps product actions grouped and return controls p
  assert.match(html,/return-modal-actions/);
  assert.match(html,/\.product-table-name \.product-photo-thumb\{align-self:flex-start!important/);
 });
+
+test('mobile sales history uses structured receipt cards and keeps desktop table', () => {
+ assert.match(html,/class="sales-mobile-cards"/);
+ assert.match(html,/class="sale-card"/);
+ assert.match(html,/class="sale-customer"/);
+ assert.match(html,/data-receipt=/);
+ assert.match(html,/data-delete-sale=/);
+ assert.match(html,/class="sales-desktop-table"/);
+ assert.match(html,/\.sale-payment \.field-label,\.sale-payment strong,\.sale-customer\{width:100%;text-align:right\}/);
+});
