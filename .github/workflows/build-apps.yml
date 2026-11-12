@@ -1,4 +1,5 @@
 name: Build Ronyal Super Store
+# Keep this workflow push-triggered so both desktop and Android artifacts rebuild together.
 
 on:
   workflow_dispatch:
