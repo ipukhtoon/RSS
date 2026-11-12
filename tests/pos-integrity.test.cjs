@@ -124,3 +124,12 @@ test('data health findings identify products and return to data health after clo
   assert.match(html, /showProductForm\(p,\{returnView:'dataHealth'\}\)/);
   assert.match(html, /options\.returnView\)\{view=options\.returnView;render\(\)\}/);
 });
+
+test('app-wide mobile card polish covers tables, modal rows, and common card components', () => {
+  assert.match(html, /\.table-wrap tbody td\{grid-template-columns:minmax\(0,34%\) minmax\(0,1fr\)!important/);
+  assert.match(html, /#returnItemForm \.table-wrap tbody tr/);
+  assert.match(html, /\.credit-card\{padding:11px!important/);
+  assert.match(html, /\.product-list \.product-card\{padding:10px!important/);
+  assert.match(html, /\.sale-confirm-item\{align-items:flex-start!important/);
+  assert.match(html, /\.receipt-screen-copy,\.receipt-copy\{padding:10px!important/);
+});
