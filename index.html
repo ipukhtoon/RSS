@@ -1973,6 +1973,110 @@ document.getElementById('lockPosButton')?.addEventListener('click',async()=>{cle
  .settings-page details summary{text-align:left!important}
 }
 </style>
+<style>
+/* ==========================================================================
+   FINAL ALIGNMENT FIX (CSS-only)
+   --------------------------------------------------------------------------
+   Corrects:
+   1. Helper / description text (.small.muted) that was right-aligned on
+      phones — form hints, card descriptions, notices, SKU lines, etc.
+   2. Stat card labels being right-aligned against left-aligned values.
+   3. Product card descriptions / prices being right-aligned.
+   4. Action buttons carrying margin-left:auto, which caused ragged
+      wrapping of button groups on mobile.
+   5. Credit customer meta text being right-aligned against the name.
+   Keeps: table stacked-card label-left / value-right pattern,
+          premium sales cards, settings totals, receipt printing.
+   ========================================================================== */
+
+/* 1. Helper / descriptive text should read from the left edge. */
+.small.muted,
+p.small.muted,
+.notice,
+.notice .small,
+.product-list .product-card span,
+.product-list .product-card b,
+.stat small,
+.stat .small,
+.stat div.small.muted,
+.expiry-alert-product small,
+.product-photo-help,
+.scanner-hint,
+.credit-card .customer-meta,
+.field .small.muted,
+.field-grid .field .small {
+  text-align: left !important;
+}
+
+/* 2. Stat cards: keep label and value on the left edge. */
+.stat strong { text-align: left !important; }
+
+/* 3. Product card: names, categories and prices stay left-aligned. */
+.product-list .product-card strong,
+.product-list .product-card span,
+.product-list .product-card b { text-align: left !important; }
+
+/* 4. Panel and section headings stay left-aligned. */
+.panel h3,
+.panel .page-head h3,
+.panel .page-head > div { text-align: left !important; }
+
+/* 5. Remove the stray margin-left:auto that made buttons drift/wrap badly. */
+.panel .actions button,
+.modal .actions button,
+#overlay .modal .actions button,
+.credit-card .actions button,
+.product-list .product-card .actions button,
+.product-row-actions button,
+.health-finding-action button {
+  margin-left: 0 !important;
+}
+
+/* 6. Standard right-aligned form / card footer action groups. */
+.panel .actions,
+.modal .actions,
+#overlay .modal .actions,
+.product-row-actions,
+.health-finding-action {
+  justify-content: flex-end !important;
+  flex-wrap: wrap !important;
+}
+
+/* Credit card has multiple buttons; keep them left-packed with wrapping. */
+.credit-card .actions {
+  justify-content: flex-start !important;
+  flex-wrap: wrap !important;
+}
+
+/* Product card action grids keep their 2-column stretch layout. */
+.product-list .product-card .actions {
+  justify-content: stretch !important;
+  flex-wrap: nowrap !important;
+}
+
+/* 7. Inside data tables, the cell keeps its own label/value alignment.
+      This prevents the global helper-text rule above from breaking the
+      stacked-card layout on phones. */
+.table-wrap .small.muted,
+.table-wrap p.small.muted { text-align: inherit !important; }
+
+/* Preserve the product table's intentional left-aligned details. */
+.table-wrap .product-table-labels .small,
+.table-wrap .product-identifiers > div { text-align: left !important; }
+
+/* Preserve the dashboard payment cell's right-aligned detail. */
+.dashboard-payment-cell .small.muted,
+.dashboard-payment-cell .dashboard-customer-name { text-align: right !important; }
+
+/* 8. Settings copy stays left-aligned on phones. */
+@media (max-width: 700px) {
+  .settings-page .small.muted,
+  .settings-page .muted,
+  .settings-page .panel,
+  .settings-page details,
+  .settings-page details summary { text-align: left !important; }
+}
+</style>
 </body></html>
 
 
