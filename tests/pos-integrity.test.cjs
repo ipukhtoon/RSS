@@ -176,3 +176,17 @@ test('settings mobile alignment is scoped to the settings page and restores left
  assert.match(html,/\.settings-page \.small\.muted,\.settings-page \.muted\{text-align:left!important\}/);
  assert.match(html,/\.settings-page \.actions\{justify-content:flex-start!important\}/);
 });
+
+
+test('final mobile alignment CSS is present and preserves table and dashboard exceptions', () => {
+  assert.match(html, /FINAL ALIGNMENT FIX \(CSS-only\)/);
+  assert.match(html, /\.small\.muted,[\s\S]*?text-align: left !important/);
+  assert.match(html, /\.table-wrap \.small\.muted,[\s\S]*?text-align: inherit !important/);
+  assert.match(html, /\.dashboard-payment-cell \.small\.muted,[\s\S]*?text-align: right !important/);
+  assert.match(html, /\.settings-page \.small\.muted,[\s\S]*?text-align: left !important/);
+});
+
+test('final alignment CSS keeps product action grids and credit actions distinct', () => {
+  assert.match(html, /\.credit-card \.actions \{[\s\S]*?justify-content: flex-start !important/);
+  assert.match(html, /\.product-list \.product-card \.actions \{[\s\S]*?justify-content: stretch !important/);
+});
