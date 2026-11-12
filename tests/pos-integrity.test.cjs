@@ -108,3 +108,11 @@ test('remaining batch cost correction is owner-gated, audited and excludes zero-
   assert.match(source, /Historical sale costs were not changed/);
   assert.doesNotMatch(source, /put\('sales'/);
 });
+
+test('mobile tables become stacked cards instead of requiring horizontal swipes', () => {
+  assert.match(html, /\.table-wrap tbody\{display:grid!important/);
+  assert.match(html, /\.table-wrap tbody td:before\{content:attr\(data-label\)/);
+  assert.match(html, /labelResponsiveTables\(document\)/);
+  assert.match(html, /data-label/);
+  assert.match(html, /\.receipt-items\{table-layout:fixed!important\}/);
+});
