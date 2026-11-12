@@ -8,7 +8,7 @@
   "theme_color": "#24110d",
   "icons": [
     {
-      "src": "./ronyal-logo-receipt.png",
+      "src": "./ronyal-logo.png",
       "sizes": "any",
       "type": "image/png",
       "purpose": "any maskable"
