@@ -133,3 +133,14 @@ test('app-wide mobile card polish covers tables, modal rows, and common card com
   assert.match(html, /\.sale-confirm-item\{align-items:flex-start!important/);
   assert.match(html, /\.receipt-screen-copy,\.receipt-copy\{padding:10px!important/);
 });
+
+test('mobile product identifiers are separated and blank table headers never create Column labels', () => {
+  assert.match(html, /product-identifiers/);
+  assert.match(html, /Pack barcode:/);
+  assert.match(html, /Piece barcode:/);
+  assert.match(html, /SKU:/);
+  assert.match(html, /if\(label\).*removeAttribute\('data-label'\)/);
+  assert.doesNotMatch(html, /Column '\+\(index\+1\)/);
+  assert.match(html, /\.product-table-name\{display:flex!important;flex-direction:column!important/);
+  assert.match(html, /\.panel \.actions,\.modal \.actions/);
+});
