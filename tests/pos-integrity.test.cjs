@@ -164,3 +164,12 @@ test('mobile sales history uses structured receipt cards and keeps desktop table
  assert.match(html,/class="sales-desktop-table"/);
  assert.match(html,/\.sale-payment \.field-label,\.sale-payment strong,\.sale-customer\{width:100%;text-align:right\}/);
 });
+
+test('mobile record tables use card rows and preserve RSS button palette', () => {
+ assert.match(html,/Unified RSS mobile record cards/);
+ assert.match(html,/\.table-wrap tbody tr\{display:grid!important;grid-template-columns:minmax\(0,1fr\)!important/);
+ assert.match(html,/\.table-wrap tbody td button\.secondary/);
+ assert.match(html,/\.table-wrap tbody td button\.danger/);
+ assert.match(html,/class="action-btn secondary view-receipt"/);
+ assert.match(html,/class="action-btn danger delete-sale"/);
+});
