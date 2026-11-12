@@ -209,3 +209,28 @@ test('transaction card CSS is mobile-only and preserves existing action data att
   assert.match(html,/data-manage-purchase=/);
   assert.match(html,/data-print-return=/);
 });
+
+
+test('dashboard recent sales use approved mobile sale cards with receipt action', () => {
+  assert.match(html,/dashboard-sales-mobile/);
+  assert.match(html,/dashboard-sale-card/);
+  assert.match(html,/data-receipt=/);
+});
+
+test('products use responsive record cards and preserve edit and batch-cost actions', () => {
+  assert.match(html,/products-mobile-cards/);
+  assert.match(html,/product-record-card/);
+  assert.match(html,/data-edit-product=/);
+  assert.match(html,/data-edit-batch-costs=/);
+});
+
+test('credit sales expose show receipt and repayments use receipt cards', () => {
+  assert.match(html,/Show receipt/);
+  assert.match(html,/repayments-mobile-cards/);
+  assert.match(html,/data-repayment-receipt=/);
+});
+
+test('return quantity input is left-aligned in the return modal on mobile', () => {
+  assert.match(html,/#returnItemForm \.return-qty-cell\{justify-items:start!important;text-align:left!important\}/);
+  assert.match(html,/#returnItemForm \.return-qty-cell input\{justify-self:start!important;margin-left:0!important;text-align:left!important/);
+});
