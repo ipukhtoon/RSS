@@ -164,3 +164,15 @@ test('mobile sales history uses structured receipt cards and keeps desktop table
  assert.match(html,/class="sales-desktop-table"/);
  assert.match(html,/\.sale-payment \.field-label,\.sale-payment strong,\.sale-customer\{width:100%;text-align:right\}/);
 });
+
+
+test('mobile sales card actions retain the original secondary and danger button colors', () => {
+ assert.match(html,/class="action-btn secondary view-receipt"/);
+ assert.match(html,/class="action-btn danger delete-sale"/);
+});
+
+test('settings mobile alignment is scoped to the settings page and restores left-aligned copy and actions', () => {
+ assert.match(html,/class="settings-page"/);
+ assert.match(html,/\.settings-page \.small\.muted,\.settings-page \.muted\{text-align:left!important\}/);
+ assert.match(html,/\.settings-page \.actions\{justify-content:flex-start!important\}/);
+});
