@@ -234,3 +234,19 @@ test('return quantity input is left-aligned in the return modal on mobile', () =
   assert.match(html,/#returnItemForm \.return-qty-cell\{justify-items:start!important;text-align:left!important\}/);
   assert.match(html,/#returnItemForm \.return-qty-cell input\{justify-self:start!important;margin-left:0!important;text-align:left!important/);
 });
+
+
+test('dashboard and credit recent-sale receipt buttons are bound to the existing receipt viewer', () => {
+  assert.match(html,/if\(view==='dashboard'\|\|view==='credit'\)\{bindReceipts\(\)\}/);
+  assert.match(html,/data-receipt=/);
+});
+
+test('customer ledger hides credit-sale entries after their individual outstanding balance reaches zero', () => {
+  assert.match(html,/ledgerRows\.filter\(item=>item\.type!=='Credit sale'\|\|\(saleOutstanding\.get\(String\(item\.saleId\)\)\|\|0\)>0\.009\)/);
+  assert.match(html,/data-ledger-receipt=/);
+});
+
+test('recent credit sale receipt action is right-aligned on mobile', () => {
+  assert.match(html,/credit-sales-mobile-cards/);
+  assert.match(html,/\.credit-sales-mobile-cards \.record-card-actions\{justify-content:flex-end!important\}/);
+});
