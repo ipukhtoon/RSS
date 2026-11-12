@@ -6,7 +6,8 @@
   "main": "electron/main.cjs",
   "scripts": {
     "build:windows": "npm run prepare:windows-icon && electron-builder --win nsis --publish never",
-    "prepare:windows-icon": "node scripts/prepare-windows-icon.cjs"
+    "prepare:windows-icon": "node scripts/prepare-windows-icon.cjs",
+    "test": "node --test tests/*.test.cjs"
   },
   "devDependencies": {
     "electron": "^35.0.0",
