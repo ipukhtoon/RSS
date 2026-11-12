@@ -2324,3 +2324,50 @@ body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
  .sale-total strong{font-size:19px}
 }
 </style>
+
+<style>
+/* App-wide button consistency: use the Products section action-button treatment.
+   Destructive actions intentionally retain a red error treatment. */
+button:not(.danger):not(.nav button):not(.mobile-nav button):not(.more-menu-item):not(.product-card){
+  background:var(--md-secondary-container);
+  color:var(--md-on-secondary-container);
+  border:1px solid transparent;
+  border-radius:999px;
+  min-height:44px;
+  padding:10px 18px;
+  font-weight:650;
+  letter-spacing:.01em;
+  box-shadow:none;
+  transition:background .15s,transform .15s;
+}
+button:not(.danger):not(.nav button):not(.mobile-nav button):not(.more-menu-item):not(.product-card):hover{
+  background:#735243;
+  filter:none;
+}
+button:not(.danger):not(.nav button):not(.mobile-nav button):not(.more-menu-item):not(.product-card):active{
+  transform:scale(.98);
+}
+button.danger{
+  background:var(--md-error-container)!important;
+  color:var(--md-error)!important;
+  border:1px solid transparent!important;
+  border-radius:999px;
+  min-height:44px;
+  padding:10px 18px;
+  font-weight:650;
+  letter-spacing:.01em;
+  box-shadow:none;
+}
+button.danger:hover{background:#b3261e!important;color:#fff!important;filter:none}
+button:disabled{opacity:.38}
+.sale-card .action-btn:not(.danger){
+  background:var(--md-secondary-container)!important;
+  color:var(--md-on-secondary-container)!important;
+  border:1px solid transparent!important;
+  border-radius:999px!important;
+}
+.sale-card .action-btn.danger{
+  background:var(--md-error-container)!important;
+  color:var(--md-error)!important;
+}
+</style>
