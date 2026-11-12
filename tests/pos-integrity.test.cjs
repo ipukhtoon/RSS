@@ -116,3 +116,11 @@ test('mobile tables become stacked cards instead of requiring horizontal swipes'
   assert.match(html, /data-label/);
   assert.match(html, /\.receipt-items\{table-layout:fixed!important\}/);
 });
+
+test('data health findings identify products and return to data health after closing product editor', () => {
+  assert.match(html, /health-finding-card/);
+  assert.match(html, /productName\(x\.productId\)/);
+  assert.match(html, /health-product-name/);
+  assert.match(html, /showProductForm\(p,\{returnView:'dataHealth'\}\)/);
+  assert.match(html, /options\.returnView\)\{view=options\.returnView;render\(\)\}/);
+});
