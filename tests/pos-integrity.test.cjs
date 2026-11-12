@@ -190,3 +190,22 @@ test('final alignment CSS keeps product action grids and credit actions distinct
   assert.match(html, /\.credit-card \.actions \{[\s\S]*?justify-content: flex-start !important/);
   assert.match(html, /\.product-list \.product-card \.actions \{[\s\S]*?justify-content: stretch !important/);
 });
+
+
+test('mobile transaction histories reuse the sales-card pattern without replacing desktop tables', () => {
+  assert.match(html,/purchase-mobile-cards/);
+  assert.match(html,/record-mobile-cards/);
+  assert.match(html,/record-desktop-table/);
+  assert.match(html,/data-manage-purchase=/);
+  assert.match(html,/data-return-sale=/);
+  assert.match(html,/data-print-return=/);
+  assert.match(html,/CREDIT SALE/);
+  assert.match(html,/Transaction history cards: reuse the approved Sales-card hierarchy/);
+});
+
+test('transaction card CSS is mobile-only and preserves existing action data attributes', () => {
+  assert.match(html,/@media\(max-width:700px\)\{\.record-desktop-table/);
+  assert.match(html,/@media\(min-width:701px\)\{\.record-mobile-cards/);
+  assert.match(html,/data-manage-purchase=/);
+  assert.match(html,/data-print-return=/);
+});
