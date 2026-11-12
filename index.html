@@ -2196,15 +2196,14 @@ body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 }
 </style>
 <style>
-/* Consistent right alignment for secondary card data and card/popup actions. */
+/* Right-align only the explicitly designated secondary/card elements.
+   General panel descriptions and panel action groups keep their natural layout. */
 @media(max-width:700px){
-  /* Keep card copy on a stable left edge; align secondary metadata and actions to the right. */
-  .panel .small.muted,.modal .small.muted,.credit-card .customer-meta,
-  .product-card span,.stat small,.expiry-alert-product small{text-align:right!important}
-  .panel .actions,.modal .actions,.credit-card .actions,.product-card .actions,
+  .credit-card .customer-meta,.product-card span,.stat small,
+  .expiry-alert-product small{text-align:right!important}
+  .credit-card .actions,.product-card .actions,
   .health-finding-action{justify-content:flex-end!important}
-  .panel .actions button,.modal .actions button,.credit-card .actions button,
-  .product-card .actions button{margin-left:auto}
+  .credit-card .actions button,.product-card .actions button{margin-left:auto}
   .table-wrap tbody td:not([colspan]){text-align:right!important}
   .table-wrap tbody td:before{text-align:left!important}
   .table-wrap tbody td .actions{justify-content:flex-end!important}
