@@ -2029,3 +2029,64 @@ body:before{content:"";position:fixed;inset:0;z-index:0;pointer-events:none;back
 @media(prefers-reduced-motion:reduce){#rssBrandSplash img,#rssBrandSplash span{animation:none!important}#rssBrandSplash{transition:none!important}}
 @media print{body:before,#rssBrandSplash{display:none!important}.receipt-brand-logo{width:23mm;max-height:20mm;filter:none!important;image-rendering:auto}}
 </style>
+
+<style>
+/* RSS mobile usability: replace horizontally-scrolling data tables with readable stacked cards. */
+@media(max-width:700px){
+  .table-wrap{width:100%;max-width:100%;overflow:visible!important;border:0!important;border-radius:0!important}
+  .table-wrap table{display:block!important;width:100%!important;min-width:0!important;max-width:100%!important;table-layout:auto!important;border-collapse:separate!important;border-spacing:0!important}
+  .table-wrap thead{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+  .table-wrap tbody{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:10px!important;width:100%!important}
+  .table-wrap tbody tr{display:grid!important;grid-template-columns:minmax(0,1fr)!important;width:100%!important;min-width:0!important;padding:9px 13px!important;border:1px solid var(--md-outline-variant,#59433a)!important;border-radius:16px!important;background:var(--md-surface-container-high,#30231f)!important}
+  .table-wrap tbody td{display:grid!important;grid-template-columns:minmax(82px,.72fr) minmax(0,1.28fr)!important;align-items:start!important;gap:10px!important;width:100%!important;min-width:0!important;padding:8px 0!important;border:0!important;border-bottom:1px solid var(--md-outline-variant,#59433a)!important;text-align:right!important;white-space:normal!important;overflow-wrap:anywhere!important}
+  .table-wrap tbody td:last-child{border-bottom:0!important}
+  .table-wrap tbody td:before{content:attr(data-label);display:block!important;min-width:0!important;color:var(--md-secondary,#e8b9a4)!important;font-size:11px!important;font-weight:700!important;letter-spacing:.025em!important;text-align:left!important;overflow-wrap:anywhere!important}
+  .table-wrap tbody td[colspan]:before{content:none!important;display:none!important}
+  .table-wrap tbody td[colspan]{display:block!important;text-align:left!important}
+  .table-wrap tbody td button{justify-self:end;max-width:100%;white-space:normal!important}
+  .table-wrap tbody td .actions{justify-content:flex-end;min-width:0}
+  .table-wrap tbody td .actions button{flex:0 1 auto;min-width:0}
+}
+@media(max-width:380px){
+  .table-wrap tbody tr{padding:8px 10px!important}
+  .table-wrap tbody td{grid-template-columns:minmax(68px,.65fr) minmax(0,1.35fr)!important;gap:7px!important;font-size:13px!important}
+}
+/* Receipts stay paper-proportioned but must never widen the phone viewport. */
+@media(max-width:700px){
+  .receipt-modal{width:100%!important;max-width:100%!important;min-width:0!important}
+  .receipt-screen-copy,.receipt-copy{width:100%!important;max-width:100%!important;min-width:0!important;box-sizing:border-box!important}
+  .receipt-items,.receipt-items-wrap{width:100%!important;max-width:100%!important;min-width:0!important;overflow:hidden!important}
+  .receipt-items{table-layout:fixed!important}
+  .receipt-items th,.receipt-items td{white-space:normal!important;overflow-wrap:anywhere!important;word-break:normal!important}
+}
+</style>
+<script>
+(function(){
+  if(window.__rssMobileTableCards)return;
+  window.__rssMobileTableCards=true;
+  function labelResponsiveTables(root){
+    const scope=root&&root.querySelectorAll?root:document;
+    scope.querySelectorAll('.table-wrap table').forEach(table=>{
+      const headers=Array.from(table.querySelectorAll('thead tr:first-child th')).map(th=>(th.textContent||'').trim());
+      if(!headers.length)return;
+      table.querySelectorAll('tbody tr').forEach(row=>{
+        Array.from(row.cells).forEach((cell,index)=>{
+          if(cell.colSpan>1)return;
+          const label=headers[index]||('Column '+(index+1));
+          if(cell.getAttribute('data-label')!==label)cell.setAttribute('data-label',label);
+        });
+      });
+    });
+  }
+  labelResponsiveTables(document);
+  const observer=new MutationObserver(records=>{
+    for(const record of records){
+      for(const node of record.addedNodes||[]){
+        if(node.nodeType===1)labelResponsiveTables(node);
+      }
+    }
+  });
+  if(document.body)observer.observe(document.body,{childList:true,subtree:true});
+  else document.addEventListener('DOMContentLoaded',()=>observer.observe(document.body,{childList:true,subtree:true}),{once:true});
+})();
+</script>
