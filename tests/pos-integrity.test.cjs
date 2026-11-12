@@ -144,3 +144,13 @@ test('mobile product identifiers are separated and blank table headers never cre
   assert.match(html, /\.product-table-name\{display:flex!important;flex-direction:column!important/);
   assert.match(html, /\.panel \.actions,\.modal \.actions/);
 });
+
+test('final mobile alignment keeps product actions grouped and return controls positioned', () => {
+ assert.match(html,/product-row-actions/);
+ assert.match(html,/product-batch-count/);
+ assert.match(html,/dashboard-customer-name/);
+ assert.match(html,/return-item-name-cell/);
+ assert.match(html,/return-qty-cell/);
+ assert.match(html,/return-modal-actions/);
+ assert.match(html,/\.product-table-name \.product-photo-thumb\{align-self:flex-start!important/);
+});
