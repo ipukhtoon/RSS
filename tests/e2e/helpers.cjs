@@ -19,8 +19,9 @@ async function navigate(page, view) {
  if (await clickVisible(page.locator(`#sideNav [data-view="${view}"]`))) { await page.waitForTimeout(180); return; }
  const more=page.locator('#mobileMoreButton');
  if (await more.count()) {
-  await more.evaluate(el=>el.click());
-  await page.locator('#mobileMoreMenu').waitFor({state:'visible'});
+  const menu=page.locator('#mobileMoreMenu');
+  if (await menu.evaluate(el=>el.classList.contains('hidden'))) await more.evaluate(el=>el.click());
+  await menu.waitFor({state:'visible'});
   const target=page.locator(`#mobileMoreMenu [data-view="${view}"]`);
   await target.waitFor({state:'visible'});
   await target.evaluate(el=>el.click());
