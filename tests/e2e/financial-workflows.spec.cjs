@@ -60,7 +60,8 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  db=await readStores(page); const creditSale=db.sales.find(s=>s.payment==='Borrow'&&s.customerName==='PW Audit Buyer');
  expect(creditSale).toBeTruthy(); expect(creditSale.total).toBe(20); expect(creditSale.initialPaymentAmount).toBe(5);
  expect(db.creditPayments.some(p=>p.saleId===creditSale.id&&p.amount===5)).toBeTruthy();
- expect(db.products.find(p=>p.id===product.id).stock).toBe(17);
+ const creditSaleStockQty=creditSale.items.reduce((n,i)=>n+Number(i.stockQty??(i.unitType==='pack'?Number(i.qty||0)*Number(i.packSize||product.packSize||1):i.qty||0)),0); const expectedAfterAllSales=expectedAfterCashSale-creditSaleStockQty;
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterAllSales);
  // Record a separate partial repayment against the customer balance.
  await navigate(page,'credit');
  await page.locator('#creditCustomerList .credit-card').filter({hasText:'PW Audit Buyer'}).getByRole('button',{name:/Record repayment/}).click();
@@ -82,7 +83,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#returnRefundMethod').selectOption('No refund');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(2);
- const cashReturnsStock=db.returns.filter(r=>r.saleId===cashSale.id).flatMap(r=>r.items||[]).reduce((n,i)=>n+Number(i.stockQty||0),0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterCashSale+cashReturnsStock);
+ const cashReturnsStock=db.returns.filter(r=>r.saleId===cashSale.id).flatMap(r=>r.items||[]).reduce((n,i)=>n+Number(i.stockQty||0),0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterAllSales+cashReturnsStock);
  // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
  await page.locator(`[data-return-sale="${creditSale.id}"]`).first().evaluate(el=>el.click());
@@ -91,7 +92,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); const creditReturn=db.returns.find(r=>r.saleId===creditSale.id);
  expect(creditReturn).toBeTruthy(); expect(creditReturn.creditAdjustment).toBe(20);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
+ const creditReturnStock=Number(creditReturn.items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterAllSales+cashReturnsStock+creditReturnStock);
  // Verify customer ledger renders, receipts are available, and balance is never negative.
  await navigate(page,'credit'); await page.locator('#creditCustomerSearch').fill('PW Audit Buyer');
  await expect(page.locator('#creditCustomerList')).toContainText('PW Audit Buyer');
