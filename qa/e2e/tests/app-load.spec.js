@@ -41,7 +41,7 @@ async function seedProduct(page) {
         stock: 18,
         lowStock: 5,
         batches: [{ id: 'qa-batch-001', qty: 18, costPerPiece: 90, expiry: '' }],
-        searchTokens: (() => { const values = ['QA Test Milk 1L', '890000000001', 'QA-SKU-001', 'QA Fixtures']; const tokens = new Set(); for (const value of values) { const words = value.toLowerCase().trim().split(/[^\\p{L}\\p{N}]+/u).filter(Boolean); for (const word of words) { tokens.add(word); if (word.length >= 3) for (let i = 0; i <= word.length - 3; i++) tokens.add(word.slice(i, i + 3)); } } return [...tokens]; })()
+        searchTokens: (() => { const values = ['QA Test Milk 1L', '890000000001', 'QA-SKU-001', 'QA Fixtures']; const tokens = new Set(); for (const value of values) { const words = value.toLowerCase().trim().split(/[^a-z0-9]+/).filter(Boolean); for (const word of words) { tokens.add(word); if (word.length >= 3) for (let i = 0; i <= word.length - 3; i++) tokens.add(word.slice(i, i + 3)); } } return [...tokens]; })()
       });
       tx.oncomplete = () => { db.close(); resolve(); };
       tx.onerror = () => reject(tx.error);
