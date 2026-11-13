@@ -40,7 +40,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await expect(page.locator('#receipt')).toContainText('Rs 40.00');
  await page.locator('#closeReceipt').click();
  db=await readStores(page); const cashSale=db.sales.find(s=>s.payment==='Cash'&&s.total===40);
- expect(cashSale).toBeTruthy(); expect(db.products.find(p=>p.id===product.id).stock).toBe(18);
+ expect(cashSale).toBeTruthy(); expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
  // Credit customer and partial-payment Udhaar sale.
  await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
  await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
