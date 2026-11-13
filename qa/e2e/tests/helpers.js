@@ -114,9 +114,10 @@ async function addFixtureProductToCart(page, sku = 'QA-SKU-001') {
   await page.locator('#posSearch').fill(sku);
   await expect(page.locator('[data-add-cart="' + PRODUCT_ID + '"]')).toBeVisible();
   await page.locator('[data-add-cart="' + PRODUCT_ID + '"]').click();
-  await expect(page.locator('#completeSale')).toBeEnabled();
+  await expect(page.locator('#cartItems')).toContainText('QA Test Milk 1L');
 }
 async function confirmSale(page) {
+  await expect(page.locator('#completeSale')).toBeEnabled();
   await page.locator('#completeSale').click();
   await expect(page.locator('#saleConfirmBackdrop')).toBeVisible();
   await page.locator('#confirmSaleNow').click();
