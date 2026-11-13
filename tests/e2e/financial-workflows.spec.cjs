@@ -180,3 +180,19 @@ test('owner sale deletion restores inventory exactly once and retains reversal t
  expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(6);
  expect(product.batches.filter(b=>String(b.id).startsWith('sale-reversal-reverse-sale-'))).toHaveLength(1);
 });
+test('isolated cash return restores product and batch stock by the exact returned quantity',async({page})=>{
+ await unlock(page);
+ const date=new Date().toISOString();
+ await seedStores(page,{products:[{id:'return-stock-p',name:'Return Stock Fixture',sku:'RETURN-STOCK',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'return-stock-b',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'return-stock-sale',receipt:'RSS-PW-RETURN-001',date,items:[{productId:'return-stock-p',name:'Return Stock Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
+ await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill('RSS-PW-RETURN-001');
+ await page.locator('[data-return-sale="return-stock-sale"]').first().evaluate(el=>el.click());
+ await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
+ await page.locator('#returnRefundMethod').selectOption('Cash');
+ await page.locator('#confirmReturn').click();
+ await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
+ await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
+ const db=await readStores(page),product=db.products.find(x=>x.id==='return-stock-p'),ret=db.returns.find(x=>x.saleId==='return-stock-sale');
+ expect(ret).toBeTruthy(); expect(ret.items[0].stockQty).toBe(1);
+ expect(product.stock,JSON.stringify({product,ret})).toBe(5);
+ expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
+});
