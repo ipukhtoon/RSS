@@ -111,6 +111,7 @@ test('Duplicate-ID batch costs can be edited independently by row index and pers
   await expect(page.locator('[data-batch-cost-index="1"]')).toHaveValue('90.00');
   await page.locator('[data-batch-cost-index="1"]').fill('95');
   await page.locator('#saveBatchCosts').click();
+  await resolveAppDialog(page);
   await expect(page.locator('#batchCostTitle')).toHaveCount(0);
   const product = await readRecord(page, 'products', p.id);
   expect(product.batches[0].costPerPiece).toBe(80);
