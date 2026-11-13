@@ -114,7 +114,16 @@ async function readRecord(page, storeName, id) {
   }), { dbName: DB_NAME, dbVersion: DB_VERSION, storeName, id });
 }
 async function go(page, view) {
-  await page.locator('#sideNav [data-view="' + view + '"]').click();
+  const labels = {
+    dashboard: 'Dashboard', pos: 'New Sale', products: 'Products',
+    purchases: 'Purchases / Restock', expiry: 'Expiry Management',
+    dataHealth: 'Data Health', sales: 'Sales history', returns: 'Returns',
+    credit: 'Credit / Udhaar', reports: 'Reports', settings: 'Backup & Settings'
+  };
+  const nav = page.locator('#sideNav [data-view="' + view + '"]');
+  await nav.click();
+  await expect(nav).toHaveClass(/active/);
+  await expect(page.locator('#main')).toContainText(labels[view] || view);
   await expect(page.locator('#main')).not.toContainText('Could not load local database');
 }
 async function addFixtureProductToCart(page, sku = 'QA-SKU-001') {
