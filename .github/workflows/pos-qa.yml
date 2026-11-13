@@ -20,9 +20,9 @@ permissions:
 
 jobs:
   browser-qa:
-    name: Playwright POS smoke tests
+    name: Playwright POS end-to-end QA
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 35
 
     steps:
       - name: Check out repository
@@ -47,6 +47,11 @@ jobs:
         working-directory: qa/e2e
         run: npm test
 
+      - name: Generate consolidated Markdown audit
+        if: always()
+        working-directory: qa/e2e
+        run: npm run report
+
       - name: Upload Playwright reports and evidence
         if: always()
         uses: actions/upload-artifact@v4
@@ -55,5 +60,6 @@ jobs:
           path: |
             qa/e2e/playwright-report/
             qa/e2e/test-results/
+            qa/AUDIT-REPORT.md
           if-no-files-found: warn
           retention-days: 14
