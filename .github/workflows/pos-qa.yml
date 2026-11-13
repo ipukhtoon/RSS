@@ -2,9 +2,6 @@ name: Ronyal POS Automated QA
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - pos-automated-qa
   pull_request:
     branches:
       - main
@@ -16,7 +13,7 @@ on:
       - '.github/workflows/pos-qa.yml'
 
 concurrency:
-  group: ronyal-pos-qa-${{ github.ref }}
+  group: ronyal-pos-qa
   cancel-in-progress: true
 
 permissions:
