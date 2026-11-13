@@ -143,3 +143,39 @@ test('Products add form exposes required inventory fields and cancel does not wr
   expect(after).toBe(before);
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
+
+
+test('Batch cost editor lists remaining batch quantity and current unit cost', async ({ page }) => {
+  const uncaughtErrors = [];
+  page.on('pageerror', error => uncaughtErrors.push(error.message));
+
+  await unlockAsOwner(page);
+  await seedProduct(page);
+  await page.locator('[data-view="products"]').first().click();
+  await expect(page.locator('#productsTable')).toContainText('QA Test Milk 1L');
+
+  await page.locator('[data-edit-batch-costs="qa-product-001"]').first().click();
+  await expect(page.locator('#batchCostTitle')).toHaveText('Remaining batch costs');
+  await expect(page.locator('#overlay')).toContainText('Remaining: 18 pc');
+  await expect(page.locator('#overlay')).toContainText('Rs 90.00 / pc');
+  await expect(page.locator('[data-batch-cost-index="0"]')).toHaveValue('90.00');
+
+  await page.locator('#cancelBatchCosts').click();
+  await expect(page.locator('#batchCostTitle')).toHaveCount(0);
+
+  const saved = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('ronyal_super_store_db', 7);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('products', 'readonly');
+      const get = tx.objectStore('products').get('qa-product-001');
+      get.onsuccess = () => resolve(get.result);
+      get.onerror = () => reject(get.error);
+      tx.oncomplete = () => db.close();
+    };
+  }));
+  expect(saved.batches[0].costPerPiece).toBe(90);
+  expect(saved.batches[0].qty).toBe(18);
+  await expect.poll(() => uncaughtErrors).toEqual([]);
+});
