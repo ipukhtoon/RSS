@@ -9,6 +9,15 @@ async function unlockAsOwner(page) {
   await expect(page.locator('#pinBackdrop')).toHaveCount(0);
 }
 
+async function unlockAsCashier(page) {
+  await page.goto('/');
+  await expect(page.locator('#pinBackdrop')).toBeVisible();
+  for (const digit of '1234') {
+    await page.locator(`[data-pin-key="${digit}"]`).click();
+  }
+  await expect(page.locator('#pinBackdrop')).toHaveCount(0);
+}
+
 async function seedProduct(page) {
   await page.evaluate(() => new Promise((resolve, reject) => {
     const request = indexedDB.open('ronyal_super_store_db', 7);
@@ -276,5 +285,26 @@ test('Credit ledger and returns screens expose their core search and entry contr
   await expect(page.locator('#main')).toContainText('Returns');
   await expect(page.locator('#returnSaleSearch')).toBeVisible();
   await expect(page.locator('#returnHistorySearch')).toBeVisible();
+  await expect.poll(() => uncaughtErrors).toEqual([]);
+});
+
+
+test('Cashier can access sales work but owner-only sections redirect safely', async ({ page }) => {
+  const uncaughtErrors = [];
+  page.on('pageerror', error => uncaughtErrors.push(error.message));
+
+  await unlockAsCashier(page);
+  await page.locator('#sideNav').locator('[data-view="products"]').click();
+  await expect(page.locator('#main')).toContainText('Products');
+
+  await page.locator('#sideNav').locator('[data-view="pos"]').click();
+  await expect(page.locator('#main')).toContainText('New Sale');
+
+  for (const id of ['reports', 'dataHealth', 'settings']) {
+    await page.locator('#sideNav').locator('[data-view="' + id + '"]').click();
+    await expect(page.locator('#main')).toContainText('Dashboard');
+    await expect(page.locator('#sideNav').locator('[data-view="dashboard"]')).toHaveClass(/active/);
+  }
+
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
