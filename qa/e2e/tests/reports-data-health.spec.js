@@ -94,12 +94,15 @@ test('Owner stock reconciliation creates adjustment batch and audit trail', asyn
     })]
   });
   await go(page, 'dataHealth');
+  const runtimeErrors = [];
+  page.on('pageerror', error => runtimeErrors.push(error.message));
   const reconcile = page.locator('[data-health-product="' + PRODUCT_ID + '"][data-health-action="reconcile-stock"]');
-  await expect.poll(() => reconcile.evaluate(el => typeof el.onclick === 'function')).toBe(true);
-  await reconcile.click();
+  await expect.poll(() => reconcile.evaluate(el => typeof el.onclick === 'function' && String(el.onclick).includes('reconcileProductStock'))).toBe(true);
+  await reconcile.evaluate(el => el.click());
   await resolveOwnerPinIfPrompted(page);
   await resolveAppDialog(page, '12');
   await resolveAppDialog(page);
+  expect(runtimeErrors).toEqual([]);
   await expect.poll(async () => (await readRecord(page, 'products', PRODUCT_ID))?.stock).toBe(12);
 
   const product = await readRecord(page, 'products', PRODUCT_ID);
