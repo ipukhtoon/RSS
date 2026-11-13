@@ -87,7 +87,6 @@ test('Data Health reports inventory mismatch, cost warning, batch outlier and be
 
 test('Owner stock reconciliation creates adjustment batch and audit trail', async ({ page }) => {
   await unlock(page);
-  await acceptAppDialogs(page, '12');
   await seed(page, {
     products: [productFixture({
       stock: 10,
