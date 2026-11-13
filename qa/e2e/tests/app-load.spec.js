@@ -92,3 +92,53 @@ test('Products inventory list loads seeded product and searches by SKU', async (
 
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
+
+
+test('Products add form exposes required inventory fields and cancel does not write data', async ({ page }) => {
+  const uncaughtErrors = [];
+  page.on('pageerror', error => uncaughtErrors.push(error.message));
+
+  await unlockAsOwner(page);
+  await page.locator('[data-view="products"]').first().click();
+  await page.locator('#addProduct').click();
+
+  const form = page.locator('#productForm');
+  await expect(form).toBeVisible();
+  await expect(form.locator('input[name="name"]')).toHaveAttribute('required', '');
+  await expect(form.locator('input[name="packSize"]')).toBeVisible();
+  await expect(form.locator('input[name="stock"]')).toHaveAttribute('required', '');
+  await expect(form.locator('#productPiecePrice')).toBeVisible();
+  await expect(form.locator('#productPackPrice')).toBeVisible();
+  await expect(form.locator('#productCostInput')).toBeVisible();
+
+  const before = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('ronyal_super_store_db', 7);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('products', 'readonly');
+      const count = tx.objectStore('products').count();
+      count.onsuccess = () => resolve(count.result);
+      count.onerror = () => reject(count.error);
+      tx.oncomplete = () => db.close();
+    };
+  }));
+
+  await page.locator('#cancelProduct').click();
+  await expect(page.locator('#productForm')).toHaveCount(0);
+
+  const after = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('ronyal_super_store_db', 7);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('products', 'readonly');
+      const count = tx.objectStore('products').count();
+      count.onsuccess = () => resolve(count.result);
+      count.onerror = () => reject(count.error);
+      tx.oncomplete = () => db.close();
+    };
+  }));
+  expect(after).toBe(before);
+  await expect.poll(() => uncaughtErrors).toEqual([]);
+});
