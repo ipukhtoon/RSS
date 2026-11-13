@@ -8,12 +8,28 @@ async function unlock(page, pin='9999') {
  await expect(page.locator('#main')).not.toContainText('Starting Ronyal Super Store POS');
 }
 async function navigate(page, view) {
- const desktop=page.locator(`#sideNav [data-view="${view}"]`);
- const mobile=page.locator(`#mobileNav [data-view="${view}"]`);
- if (await desktop.isVisible()) await desktop.click();
- else if (await mobile.isVisible()) await mobile.click();
- else { await page.locator('#mobileMoreButton').click(); await page.locator(`#mobileMoreMenu [data-view="${view}"]`).click(); }
- await page.waitForTimeout(150);
+ const clickVisible = async locator => {
+  if (await locator.count()) {
+   const first=locator.first();
+   if (await first.isVisible().catch(()=>false)) { await first.evaluate(el=>el.click()); return true; }
+  }
+  return false;
+ };
+ if (await clickVisible(page.locator(`#mobileNav [data-view="${view}"]`))) { await page.waitForTimeout(180); return; }
+ if (await clickVisible(page.locator(`#sideNav [data-view="${view}"]`))) { await page.waitForTimeout(180); return; }
+ const more=page.locator('#mobileMoreButton');
+ if (await more.count()) {
+  await more.evaluate(el=>el.click());
+  await page.locator('#mobileMoreMenu').waitFor({state:'visible'});
+  const target=page.locator(`#mobileMoreMenu [data-view="${view}"]`);
+  await target.waitFor({state:'visible'});
+  await target.evaluate(el=>el.click());
+ } else {
+  const target=page.locator(`#sideNav [data-view="${view}"]`);
+  await target.waitFor({state:'attached'});
+  await target.evaluate(el=>el.click());
+ }
+ await page.waitForTimeout(180);
 }
 async function readStores(page, names=['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns']) {
  return page.evaluate(async names=>{const req=indexedDB.open('ronyal_super_store_db');const db=await new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});const tx=db.transaction(names,'readonly');const values={};await Promise.all(names.map(name=>new Promise((resolve,reject)=>{const r=tx.objectStore(name).getAll();r.onsuccess=()=>{values[name]=r.result;resolve()};r.onerror=()=>reject(r.error)})));await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)});db.close();return values},names);
