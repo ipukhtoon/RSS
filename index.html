@@ -1748,8 +1748,21 @@ async function startScanner(){
 document.addEventListener('keydown',e=>{if(e.key==='Enter'&&e.target.matches('#productBarcode,#productPieceBarcode')){e.preventDefault();e.stopPropagation();const input=e.target;if(input.value.trim())toast('Barcode captured. Continue filling the product details, then save.')}} ,true);
 document.addEventListener('click',e=>{const b=e.target.closest('[data-go]');if(b)setView(b.dataset.go)});
 document.addEventListener('click',e=>{const b=e.target.closest('.expand-toggle');if(!b)return;const key=b.dataset.expandTarget,expanded=b.dataset.expanded!=='true',list=document.querySelector(`[data-expand-list="${key}"]`);if(!list)return;list.querySelectorAll('.expand-row').forEach((row,i)=>{row.classList.toggle('expand-hidden',!expanded&&i>=({recent:10,low:8,expiry:8}[key]||8))});b.dataset.expanded=String(expanded);const labels={low:'low-stock items',expiry:'expiry alerts'};b.textContent=expanded?'See less '+labels[key]:'See more '+labels[key]+' ('+Math.max(0,list.querySelectorAll('.expand-row').length-({recent:10,low:8,expiry:8}[key]||8))+' more)'});
+async function migrateUnbatchedProductStockToOpeningBatches(){
+ const products=await getAll('products'),updates=[];
+ for(const product of products){
+  const stock=Math.max(0,Math.floor(Number(product.stock)||0));
+  if(stock<=0||(Array.isArray(product.batches)&&product.batches.length>0))continue;
+  const expiry=/^\\d{4}-\\d{2}-\\d{2}$/.test(String(product.expiry||''))?String(product.expiry):'';
+  const receivedAt=product.updatedAt&&Number.isFinite(Date.parse(product.updatedAt))?product.updatedAt:new Date().toISOString();
+  product.batches=[{id:'legacy-'+String(product.id||'item'),qty:stock,expiry,costPerPiece:Math.max(0,Number(product.cost)||0),receivedAt,legacy:true,source:'opening-stock'}];
+  updates.push({name:'products',item:product});
+ }
+ if(updates.length)await putManyAtomic(updates);
+ return updates.length;
+}
 document.getElementById('lockPosButton')?.addEventListener('click',async()=>{clearLogin();view='dashboard';await render();await showPinLockScreen();if(isUnlocked())await render()});window.addEventListener('beforeunload',()=>{if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop())});
-(async()=>{try{if(!('indexedDB'in window))throw new Error('This browser does not support IndexedDB');db=await openDB();if(!window.isSecureContext&&location.hostname!=='localhost'&&location.protocol!=='file:')document.getElementById('connectionStatus').textContent='⚠ HTTPS needed for camera';await showPinLockScreen(true);if(isUnlocked())await render()}catch(e){const main=document.getElementById('main');if(main)main.innerHTML=`<div class="panel"><h2>Could not start POS</h2><p>${esc(e?.message||e)}</p><p>Your saved records have not been intentionally deleted. Close any other Ronyal POS tabs and reload this page. Do not clear browser storage or uninstall the browser.</p><div class="actions"><button type="button" onclick="location.reload()">Reload POS</button></div></div>`;console.error('POS startup error:',e)}})();
+(async()=>{try{if(!('indexedDB'in window))throw new Error('This browser does not support IndexedDB');db=await openDB();await migrateUnbatchedProductStockToOpeningBatches();if(!window.isSecureContext&&location.hostname!=='localhost'&&location.protocol!=='file:')document.getElementById('connectionStatus').textContent='⚠ HTTPS needed for camera';await showPinLockScreen(true);if(isUnlocked())await render()}catch(e){const main=document.getElementById('main');if(main)main.innerHTML=`<div class="panel"><h2>Could not start POS</h2><p>${esc(e?.message||e)}</p><p>Your saved records have not been intentionally deleted. Close any other Ronyal POS tabs and reload this page. Do not clear browser storage or uninstall the browser.</p><div class="actions"><button type="button" onclick="location.reload()">Reload POS</button></div></div>`;console.error('POS startup error:',e)}})();
 })();
 // Android/WebView Back-button support for POS dialogs and form popups.
 // A temporary history entry lets Android's normal WebView goBack() close a popup first.
