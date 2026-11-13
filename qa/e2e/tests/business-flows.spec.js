@@ -141,7 +141,7 @@ test('Udhaar return with store credit restores stock and reduces linked customer
   });
   await go(page, 'returns');
   await page.locator('#returnSaleSearch').fill('QA-UDHAAR-RETURN-001');
-  await page.locator('[data-return-sale="qa-credit-return-sale"]').click();
+  await page.locator('[data-return-sale="qa-credit-return-sale"]').first().click();
   await page.locator('[data-return-index="0"]').fill('1');
   await page.locator('#returnRefundMethod').selectOption('Store credit');
   await page.locator('#confirmReturn').click();
@@ -184,7 +184,7 @@ test('Cash refund against a partially paid Udhaar sale persists the refund and d
   });
   await go(page, 'returns');
   await page.locator('#returnSaleSearch').fill('QA-PARTIAL-CASH-RETURN');
-  await page.locator('[data-return-sale="qa-partial-cash-return-sale"]').click();
+  await page.locator('[data-return-sale="qa-partial-cash-return-sale"]').first().click();
   await page.locator('[data-return-index="0"]').fill('1');
   await page.locator('#returnRefundMethod').selectOption('Cash');
   await page.locator('#confirmReturn').click();
@@ -216,7 +216,7 @@ test('Two partial returns cannot return more than the original sold quantity', a
   });
   await go(page, 'returns');
   await page.locator('#returnSaleSearch').fill('QA-MULTI-RETURN-001');
-  await page.locator('[data-return-sale="qa-multi-return-sale"]').click();
+  await page.locator('[data-return-sale="qa-multi-return-sale"]').first().click();
   await page.locator('[data-return-index="0"]').fill('1');
   await page.locator('#returnRefundMethod').selectOption('Cash');
   await page.locator('#confirmReturn').click();
@@ -224,7 +224,7 @@ test('Two partial returns cannot return more than the original sold quantity', a
   await expect(page.locator('#returnModalBackdrop')).toHaveCount(0);
 
   await page.locator('#returnSaleSearch').fill('QA-MULTI-RETURN-001');
-  await page.locator('[data-return-sale="qa-multi-return-sale"]').click();
+  await page.locator('[data-return-sale="qa-multi-return-sale"]').first().click();
   await expect(page.locator('[data-return-index="0"]')).toHaveAttribute('max', '1');
   await page.locator('[data-return-index="0"]').fill('1');
   await page.locator('#returnRefundMethod').selectOption('Cash');
