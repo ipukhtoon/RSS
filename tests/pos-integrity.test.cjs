@@ -254,3 +254,15 @@ test('customer ledger statement terminates before mounting the ledger modal', ()
   assert.match(html,/\.map\(item=>item\.row\)\.join\(''\);mount\.innerHTML=/);
   assert.doesNotMatch(html,/\.map\(item=>item\.row\)\.join\(''\)mount\.innerHTML=/);
 });
+
+
+test('Firestore payload sanitizer recursively removes undefined object fields', () => {
+  const vm = require('node:vm');
+  const start = html.indexOf('function firestoreSafeData(value){');
+  const end = html.indexOf('async function syncOneLocalRow', start);
+  assert.ok(start >= 0 && end > start, 'Firestore sanitizer exists');
+  const context = {};
+  vm.runInNewContext(html.slice(start, end) + ';this.clean=firestoreSafeData;', context);
+  const cleaned = context.clean({id:'safe-1',optional:undefined,nested:{keep:1,omit:undefined},list:[1,undefined,{keep:true,omit:undefined}]});
+  assert.deepEqual(JSON.parse(JSON.stringify(cleaned)),{id:'safe-1',nested:{keep:1},list:[1,null,{keep:true}]});
+});
