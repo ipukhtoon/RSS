@@ -940,7 +940,7 @@ async function editProductBatches(productId){
    if(!Number.isInteger(index)||index<0||index>=product.batches.length){toast('Batch reference is invalid. Nothing was saved.');return}
    if(!edited.has(index))edited.set(index,{});
    const value=input.value;
-   if(field==='expiry'){if(value&&!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)){toast('Enter a valid expiry date.');return}edited.get(index).expiry=value}
+   if(field==='expiry'){if(value&&!/^\d{4}-\d{2}-\d{2}$/.test(value)){toast('Enter a valid expiry date.');return}edited.get(index).expiry=value}
    else {const n=Number(value);if(!Number.isFinite(n)||n<0||(field==='qty'&&!Number.isInteger(n))){toast(field==='qty'?'Batch stock must be a whole number of zero or more.':'Costs and prices must be valid non-negative numbers.');return}edited.get(index)[field]=n}
   }
   const changes=[];
