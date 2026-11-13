@@ -71,5 +71,24 @@ test('Products inventory list loads seeded product and searches by SKU', async (
   await expect(page.locator('#productsTable')).toContainText('QA Test Milk 1L');
   await expect(page.locator('#productsTable')).not.toContainText('No products found');
 
+  await page.locator('#productSearch').fill('890000000001');
+  await expect(page.locator('#productsTable')).toContainText('QA Test Milk 1L');
+
+  const saved = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('ronyal_super_store_db', 7);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction('products', 'readonly');
+      const get = tx.objectStore('products').get('qa-product-001');
+      get.onsuccess = () => resolve(get.result);
+      get.onerror = () => reject(get.error);
+      tx.oncomplete = () => db.close();
+    };
+  }));
+  expect(saved.stock).toBe(18);
+  expect(saved.batches).toHaveLength(1);
+  expect(saved.batches[0].qty).toBe(18);
+
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
