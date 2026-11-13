@@ -41,6 +41,10 @@ A test passes only when its explicit assertions pass. The generated report lists
 - The suite does not certify every possible product, payment, date-period, purchase-edit, PIN recovery, or concurrency edge case. Review the coverage matrix.
 - A green CI run proves only the named assertions in that run, not the whole POS in every environment.
 
+## Confirmed regression finding
+
+The full browser suite exposed a production defect in owner stock reconciliation: the numeric-count validator uses a double-escaped digit regex and rejects valid values such as `12`. The reconciliation regression is retained as an **expected failure** until the production fix is approved and applied. See `qa/KNOWN-ISSUES.md` for reproduction, impact and the minimal correction. No production source has been changed in this PR.
+
 ## Financial review item
 
 The Udhaar cash-refund scenario records a full item refund in `refundTotal` and `creditAdjustment`, while the balance calculation caps the debt reduction at the remaining outstanding amount. For a partially paid Rs 120 credit sale with Rs 20 previously collected, the current code can record Rs 120 cash refund while reducing only Rs 100 of debt. The test preserves evidence of this current behaviour; the correct cash-refund policy (cash refund capped to payments received, store credit, or another explicit accounting rule) requires owner decision before any production fix.
