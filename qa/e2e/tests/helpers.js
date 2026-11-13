@@ -32,11 +32,6 @@ function customerFixture(overrides = {}) {
     notes: 'Automated QA fixture', createdAt: new Date().toISOString(), ...overrides };
 }
 async function unlock(page, role = 'owner') {
-  await page.addLocatorHandler(page.locator('.app-dialog-backdrop'), async dialog => {
-    const input = dialog.locator('.app-dialog-input');
-    if (await input.count()) await input.fill('12');
-    await dialog.locator('.app-dialog-actions button').last().click();
-  });
   await page.goto('/');
   await expect(page.locator('#pinBackdrop')).toBeVisible();
   for (const digit of (role === 'cashier' ? '1234' : '9999')) {
@@ -44,12 +39,12 @@ async function unlock(page, role = 'owner') {
   }
   await expect(page.locator('#pinBackdrop')).toHaveCount(0);
 }
-async function acceptAppDialogs(page, promptValue = '12') {
-  await page.evaluate(value => {
-    window.appConfirm = async () => true;
-    window.appAlert = async () => {};
-    window.appPrompt = async () => String(value);
-  }, promptValue);
+async function resolveAppDialog(page, promptValue = '12') {
+  const dialog = page.locator('.app-dialog-backdrop').last();
+  await expect(dialog).toBeVisible();
+  const input = dialog.locator('.app-dialog-input');
+  if (await input.count()) await input.fill(String(promptValue));
+  await dialog.locator('.app-dialog-actions button').last().click();
 }
 async function seed(page, records = {}) {
   await page.evaluate(({ records, dbName, dbVersion }) => new Promise((resolve, reject) => {
@@ -133,6 +128,6 @@ async function closeReceipt(page) {
 }
 module.exports = {
   DB_NAME, DB_VERSION, PRODUCT_ID, CUSTOMER_ID, productFixture, customerFixture,
-  unlock, acceptAppDialogs, seed, readStore, readRecord, go,
+  unlock, resolveAppDialog, seed, readStore, readRecord, go,
   addFixtureProductToCart, confirmSale, closeReceipt
 };
