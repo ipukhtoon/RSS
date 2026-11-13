@@ -51,8 +51,12 @@ async function resolveAppDialog(page, promptValue = '12') {
   const dialog = page.locator('.app-dialog-backdrop').last();
   await expect(dialog).toBeVisible();
   const input = dialog.locator('.app-dialog-input');
-  if (await input.count()) await input.fill(String(promptValue));
-  await dialog.locator('.app-dialog-actions button').last().click();
+  if (await input.count()) {
+    await input.fill(String(promptValue));
+    await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
+  } else {
+    await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
+  }
 }
 async function seed(page, records = {}) {
   await page.evaluate(({ records, dbName, dbVersion }) => new Promise((resolve, reject) => {
