@@ -69,6 +69,9 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#creditPaymentForm [name=amount]').fill('5');
  await page.locator('#creditPaymentForm button[type=submit]').click();
  db=await readStores(page); expect(db.creditPayments.some(p=>p.customerId===creditSale.customerId&&p.amount===5)).toBeTruthy();
+ // Capture the actual post-sale stock baseline before testing the return delta.
+ const stockBeforeCashReturn=Number(db.products.find(p=>p.id===product.id).stock);
+ expect(stockBeforeCashReturn).toBe(expectedAfterAllSales);
  // First partial cash return: only one of two pieces, then the remaining piece.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
@@ -77,7 +80,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
  expect(db.returns.find(r=>r.saleId===cashSale.id).items[0].productId).toBe(product.id);
- const firstReturnedStock=Number(db.returns.find(r=>r.saleId===cashSale.id).items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({saleItems:cashSale.items,expectedAfterCashSale,product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id).items[0]})).toBe(expectedAfterAllSales+firstReturnedStock);
+ const firstReturnedStock=Number(db.returns.find(r=>r.saleId===cashSale.id).items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({saleItems:cashSale.items,expectedAfterCashSale,product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id).items[0]})).toBe(stockBeforeCashReturn+firstReturnedStock);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
