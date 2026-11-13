@@ -211,3 +211,70 @@ test('Owner can open every POS section without database or JavaScript errors', a
 
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
+
+
+test('Purchase restock form previews a selected product without changing inventory', async ({ page }) => {
+  const uncaughtErrors = [];
+  page.on('pageerror', error => uncaughtErrors.push(error.message));
+
+  await unlockAsOwner(page);
+  await seedProduct(page);
+  await page.locator('#sideNav').locator('[data-view="purchases"]').click();
+
+  await page.locator('#openPurchaseForm').click();
+  const form = page.locator('#purchaseForm');
+  await expect(form).toBeVisible();
+
+  await page.locator('#purchaseProductSearch').fill('QA-SKU-001');
+  const productOption = page.locator('[data-purchase-product="qa-product-001"]');
+  await expect(productOption).toBeVisible();
+  await productOption.click();
+
+  await expect(page.locator('#purchaseProduct')).toHaveValue('qa-product-001');
+  await expect(page.locator('#purchaseProductInfo')).toContainText('Current stock: 18 pieces');
+  await expect(page.locator('#purchaseCalculation')).toContainText('Stock to add: 6 pieces');
+  await expect(page.locator('#purchaseCalculation')).toContainText('New stock: 24 pieces');
+
+  const saved = await page.evaluate(() => new Promise((resolve, reject) => {
+    const request = indexedDB.open('ronyal_super_store_db', 7);
+    request.onerror = () => reject(request.error);
+    request.onsuccess = () => {
+      const db = request.result;
+      const tx = db.transaction(['products', 'purchases'], 'readonly');
+      const productRequest = tx.objectStore('products').get('qa-product-001');
+      const purchaseCount = tx.objectStore('purchases').count();
+      const result = {};
+      productRequest.onsuccess = () => result.product = productRequest.result;
+      purchaseCount.onsuccess = () => result.purchaseCount = purchaseCount.result;
+      tx.oncomplete = () => { db.close(); resolve(result); };
+      tx.onerror = () => reject(tx.error);
+    };
+  }));
+  expect(saved.product.stock).toBe(18);
+  expect(saved.product.batches[0].qty).toBe(18);
+  expect(saved.purchaseCount).toBe(0);
+
+  await page.locator('#closePurchaseForm').click();
+  await expect(page.locator('#purchaseFormPanel')).toBeHidden();
+  await expect.poll(() => uncaughtErrors).toEqual([]);
+});
+
+test('Credit ledger and returns screens expose their core search and entry controls', async ({ page }) => {
+  const uncaughtErrors = [];
+  page.on('pageerror', error => uncaughtErrors.push(error.message));
+
+  await unlockAsOwner(page);
+
+  await page.locator('#sideNav').locator('[data-view="credit"]').click();
+  await expect(page.locator('#main')).toContainText('Credit / Udhaar');
+  await expect(page.locator('#creditCustomerForm')).toBeVisible();
+  await expect(page.locator('#creditCustomerForm input[name="name"]')).toHaveAttribute('required', '');
+  await expect(page.locator('#creditCustomerSearch')).toBeVisible();
+  await expect(page.locator('#repaymentSearch')).toBeVisible();
+
+  await page.locator('#sideNav').locator('[data-view="returns"]').click();
+  await expect(page.locator('#main')).toContainText('Returns');
+  await expect(page.locator('#returnSaleSearch')).toBeVisible();
+  await expect(page.locator('#returnHistorySearch')).toBeVisible();
+  await expect.poll(() => uncaughtErrors).toEqual([]);
+});
