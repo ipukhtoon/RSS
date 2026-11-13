@@ -53,6 +53,7 @@ async function resolveAppDialog(page, promptValue = '12') {
   const input = dialog.locator('.app-dialog-input');
   if (await input.count()) {
     await input.fill(String(promptValue));
+    await expect(input).toHaveValue(String(promptValue));
     await dialog.getByRole('button', { name: 'Continue', exact: true }).click();
   } else {
     await dialog.getByRole('button', { name: 'Confirm', exact: true }).click();
