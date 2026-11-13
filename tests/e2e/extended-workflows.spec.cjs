@@ -10,7 +10,7 @@ test('duplicate-ID batches keep independent cost edits and audit trails',async({
   {id:'same-batch-id',qty:3,costPerPiece:20,expiry:'',receivedAt:'2026-02-01T00:00:00.000Z'}
  ]}]});
  await navigate(page,'products'); await page.locator('#productSearch').fill('Duplicate Batch Cost Fixture');
- await page.locator('[data-edit-batch-costs="dup-cost-p"]').click();
+ await page.locator('[data-edit-batch-costs="dup-cost-p"]:visible').click();
  await page.locator('[data-batch-cost-index="0"]').fill('12.50');
  await page.locator('[data-batch-cost-index="1"]').fill('25.75');
  await page.locator('#saveBatchCosts').click(); await confirmAppDialog(page,true);
@@ -49,7 +49,7 @@ test('historical sale cost is immutable after remaining batch cost correction',a
   returns:[{id:'history-cost-return',saleId:'history-cost-sale',receipt:'RSS-PW-HIST-COST',date,items:[{saleItemIndex:0,productId:'history-cost-p',name:'Historical Cost Fixture',qty:1,unitRefund:50,lineRefund:50,stockQty:1,unitCost:10}],refundTotal:50,refundMethod:'Cash'}]
  });
  await navigate(page,'products'); await page.locator('#productSearch').fill('Historical Cost Fixture');
- await page.locator('[data-edit-batch-costs="history-cost-p"]').click();
+ await page.locator('[data-edit-batch-costs="history-cost-p"]:visible').click();
  await page.locator('[data-batch-cost-index="0"]').fill('99');
  await page.locator('#saveBatchCosts').click(); await confirmAppDialog(page,true);
  const db=await readStores(page);
