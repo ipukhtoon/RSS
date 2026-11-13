@@ -85,7 +85,8 @@ test('Data Health reports inventory mismatch, cost warning, batch outlier and be
   expect(product.batches[0].qty).toBe(8);
 });
 
-test('Owner stock reconciliation creates adjustment batch and audit trail', async ({ page }) => {
+test('Owner stock reconciliation accepts a valid count, creates adjustment batch and audit trail', async ({ page }) => {
+  test.fail(true, 'Known production defect POS-QA-001: the double-escaped digit regex rejects valid numeric counts. Remove this marker after the production fix.');
   await unlock(page);
   await seed(page, {
     products: [productFixture({
@@ -101,8 +102,10 @@ test('Owner stock reconciliation creates adjustment batch and audit trail', asyn
   await reconcile.evaluate(el => el.click());
   await resolveOwnerPinIfPrompted(page);
   await resolveAppDialog(page, '12');
-  await page.waitForTimeout(200);
+  await page.waitForTimeout(150);
   expect(runtimeErrors).toEqual([]);
+  const validationToast = await page.locator('#toast').innerText().catch(() => '');
+  expect(validationToast).not.toContain('Enter a whole number of pieces. No changes were made.');
   await resolveAppDialog(page);
   expect(runtimeErrors).toEqual([]);
   await expect.poll(async () => (await readRecord(page, 'products', PRODUCT_ID))?.stock).toBe(12);
