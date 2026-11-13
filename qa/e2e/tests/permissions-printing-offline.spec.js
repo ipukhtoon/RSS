@@ -32,7 +32,7 @@ test('Receipt renders customer and shop copies and invokes browser print adapter
   await page.locator('#cashReceived').fill('120');
   await confirmSale(page);
 
-  await expect(page.locator('#receipt .receipt-copy')).toHaveCount(2);
+  await expect(page.locator('#receipt .receipt-print-copies .receipt-copy')).toHaveCount(2);
   await expect(page.locator('#receipt')).toContainText('CUSTOMER COPY');
   await expect(page.locator('#receipt')).toContainText('SHOP COPY');
   await expect(page.locator('#receipt')).toContainText('Rs 120.00');
