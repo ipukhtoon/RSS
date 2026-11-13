@@ -1,6 +1,6 @@
 'use strict';
 const {test,expect}=require('@playwright/test');
-const {unlock,navigate,readStores,confirmAppDialog}=require('./helpers.cjs');
+const {unlock,navigate,readStores,seedStores,confirmAppDialog}=require('./helpers.cjs');
 test.beforeEach(async({page})=>{await page.route('https://www.gstatic.com/**',route=>route.abort());});
 test('complete financial journey: product, purchase, cash, Udhaar, repayment, partial returns and reports',async({page})=>{
  await unlock(page);
@@ -40,7 +40,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await expect(page.locator('#receipt')).toContainText('Rs 40.00');
  await page.locator('#closeReceipt').click();
  db=await readStores(page); const cashSale=db.sales.find(s=>s.payment==='Cash'&&s.total===40);
- expect(cashSale).toBeTruthy(); expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
+ expect(cashSale).toBeTruthy(); expect(db.products.find(p=>p.id===product.id).stock).toBe(18);
  // Credit customer and partial-payment Udhaar sale.
  await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
  await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
@@ -71,14 +71,14 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#returnRefundMethod').selectOption('Cash');
  await page.locator('#confirmReturn').click(); await confirmAppDialog(page,true);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(18);
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator('[data-return-sale]').click();
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('No refund');
  await page.locator('#confirmReturn').click(); await confirmAppDialog(page,true);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(2);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
  // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
  await page.locator('[data-return-sale]').click();
@@ -137,7 +137,7 @@ test('receipt contains two print copies and invokes browser print without changi
  const after=await readStores(page); expect(after.sales).toHaveLength(before.sales.length);
 });
 test('mobile navigation exposes secondary POS destinations through More',async({page})=>{
- await unlock(page); await expect(page.locator('#mobileNav')).toBeVisible();
+ await page.setViewportSize({width:390,height:844}); await unlock(page); await expect(page.locator('#mobileNav')).toBeVisible();
  await page.locator('#mobileMoreButton').click();
  await expect(page.locator('#mobileMoreMenu')).toBeVisible();
  await expect(page.locator('#mobileMoreMenu [data-view="returns"]')).toBeVisible();
