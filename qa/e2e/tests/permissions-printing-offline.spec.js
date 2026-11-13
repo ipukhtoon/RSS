@@ -1,5 +1,8 @@
 const { test, expect } = require('@playwright/test');
-const { unlock, seed, productFixture, readRecord, go } = require('./helpers');
+const {
+  unlock, seed, productFixture, readRecord, go,
+  addFixtureProductToCart, confirmSale, closeReceipt
+} = require('./helpers');
 
 test('Cashier retains sales access but owner-only Reports, Data Health and Settings require owner PIN', async ({ page }) => {
   await unlock(page, 'cashier');
@@ -18,28 +21,29 @@ test('Cashier retains sales access but owner-only Reports, Data Health and Setti
   }
 });
 
-test('Receipt renders customer and shop copies and calls browser print adapter', async ({ page }) => {
+test('Receipt renders customer and shop copies and invokes browser print adapter after a real sale', async ({ page }) => {
   await unlock(page);
+  await seed(page, { products: [productFixture()] });
   await page.evaluate(() => {
     window.__qaPrintCalls = 0;
     window.print = () => { window.__qaPrintCalls += 1; };
-    showReceipt({
-      id: 'qa-receipt', receipt: 'QA-PRINT-001', date: new Date().toISOString(),
-      subtotal: 120, discount: 0, total: 120, payment: 'Cash',
-      cashReceived: 120, change: 0,
-      items: [{ name: 'QA Test Milk 1L', qty: 1, unitType: 'piece', price: 120, lineTotal: 120 }]
-    });
   });
+  await addFixtureProductToCart(page);
+  await page.locator('#cashReceived').fill('120');
+  await confirmSale(page);
+
   await expect(page.locator('#receipt .receipt-copy')).toHaveCount(2);
-  await expect(page.locator('#receipt')).toContainText('QA-PRINT-001');
   await expect(page.locator('#receipt')).toContainText('CUSTOMER COPY');
   await expect(page.locator('#receipt')).toContainText('SHOP COPY');
+  await expect(page.locator('#receipt')).toContainText('Rs 120.00');
   await page.locator('#printReceipt').click();
   expect(await page.evaluate(() => window.__qaPrintCalls)).toBe(1);
+  await closeReceipt(page);
 });
 
-test('Android native print adapter receives the receipt job name and checks print status', async ({ page }) => {
+test('Android native print bridge receives the expected job name after a real sale', async ({ page }) => {
   await unlock(page);
+  await seed(page, { products: [productFixture()] });
   await page.evaluate(() => {
     window.__qaNativePrintCalls = [];
     window.Capacitor = { isNativePlatform: () => true };
@@ -47,17 +51,15 @@ test('Android native print adapter receives the receipt job name and checks prin
       getPrintStatus: async () => ({ activityAvailable: true, printingFeature: true, printManagerAvailable: true }),
       printWebView: async options => { window.__qaNativePrintCalls.push(options); }
     };
-    showReceipt({
-      id: 'qa-native-receipt', receipt: 'QA-NATIVE-001', date: new Date().toISOString(),
-      subtotal: 120, discount: 0, total: 120, payment: 'Cash',
-      cashReceived: 120, change: 0,
-      items: [{ name: 'QA Test Milk 1L', qty: 1, unitType: 'piece', price: 120, lineTotal: 120 }]
-    });
   });
+  await addFixtureProductToCart(page);
+  await page.locator('#cashReceived').fill('120');
+  await confirmSale(page);
   await page.locator('#printReceipt').click();
   await expect.poll(() => page.evaluate(() => window.__qaNativePrintCalls.length)).toBe(1);
   const calls = await page.evaluate(() => window.__qaNativePrintCalls);
   expect(calls[0].name).toBe('Ronyal Super Store Sales Receipt');
+  await closeReceipt(page);
 });
 
 test('Offline browser retains local IndexedDB products and inventory view', async ({ page, context }) => {
