@@ -45,7 +45,8 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
  await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
  await page.locator('#creditCustomerForm button[type=submit]').click();
- await expect(page.locator('.credit-card').filter({hasText:'PW Audit Buyer'})).toBeVisible();
+ await expect.poll(async()=> (await readStores(page)).customers.some(x=>x.name==='PW Audit Buyer')).toBe(true);
+ await navigate(page,'credit'); await expect(page.locator('#creditCustomerList')).toContainText('PW Audit Buyer');
  await navigate(page,'pos'); await page.locator('#posSearch').fill('PW Audit Water');
  await page.locator('#posProducts [data-add-cart]').click(); await page.locator('#payment').selectOption('Borrow');
  await page.locator('#borrowCustomerSearch').fill('PW Audit Buyer');
@@ -60,7 +61,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  expect(db.products.find(p=>p.id===product.id).stock).toBe(17);
  // Record a separate partial repayment against the customer balance.
  await navigate(page,'credit');
- await page.locator('.credit-card').filter({hasText:'PW Audit Buyer'}).getByRole('button',{name:/Record repayment/}).click();
+ await page.locator('#creditCustomerList .credit-card').filter({hasText:'PW Audit Buyer'}).getByRole('button',{name:/Record repayment/}).click();
  await page.locator('#creditPaymentForm [name=amount]').fill('5');
  await page.locator('#creditPaymentForm button[type=submit]').click();
  db=await readStores(page); expect(db.creditPayments.some(p=>p.customerId===creditSale.customerId&&p.amount===5)).toBeTruthy();
@@ -81,7 +82,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
  // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
- await page.locator(`[data-return-sale="${cashSale.id}"]`).first().click();
+ await page.locator(`[data-return-sale="${creditSale.id}"]`).first().click();
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('Cash');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
@@ -154,7 +155,7 @@ test('Data Health reconciliation and independent batch-cost correction persist e
  await expect(page.locator('#main')).toContainText('Stock / batch mismatch');
  await page.locator('[data-health-product="health-stock-p"][data-health-action="reconcile-stock"]').click();
  await expect(page.locator('.app-dialog-input')).toBeVisible(); await page.locator('.app-dialog-input').fill('5');
- await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Continue'}).click(); await confirmAppDialog(page,true);
+ await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Continue'}).click();
  let db=await readStores(page); let p=db.products.find(x=>x.id==='health-stock-p');
  expect(p.stock).toBe(5); expect(p.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
  await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Batch cost outlier');
@@ -168,7 +169,7 @@ test('owner sale deletion restores inventory exactly once and retains reversal t
  await unlock(page);
  const date=new Date().toISOString();
  await seedStores(page,{products:[{id:'reverse-p',name:'Reversal Fixture',sku:'REV-001',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'reverse-original-batch',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'reverse-sale',receipt:'RSS-PW-REV-001',date,items:[{productId:'reverse-p',name:'Reversal Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
- await navigate(page,'sales'); await expect(page.locator('[data-delete-sale="reverse-sale"]')).toBeVisible();
+ await navigate(page,'sales'); await expect(page.locator('[data-delete-sale="reverse-sale"]').first()).toBeVisible();
  await page.locator('[data-delete-sale="reverse-sale"]').first().click();
  await page.locator('#confirmDeleteSale').click(); await page.locator('#confirmDeleteSale').waitFor({state:'detached'});
  let db=await readStores(page); expect(db.sales.some(s=>s.id==='reverse-sale')).toBe(false);
