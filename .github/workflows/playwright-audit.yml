@@ -11,29 +11,26 @@ permissions:
 
 jobs:
   browser-audit:
-    name: Node integrity + Playwright (${{ matrix.project }})
+    name: POS audit (${{ matrix.project }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
         project: [chromium-desktop, chromium-mobile]
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
       - name: Install dependencies
         run: npm install
-      - name: Install Playwright browser
+      - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run existing integrity tests
         run: npm test
-      - name: Run browser tests
+      - name: Run Playwright audit
         run: npx playwright test --project=${{ matrix.project }}
-      - name: Upload test evidence
+      - name: Upload evidence
         if: always()
         uses: actions/upload-artifact@v4
         with:
