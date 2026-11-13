@@ -1,6 +1,7 @@
 const { test, expect } = require('@playwright/test');
 
 async function unlockAsOwner(page) {
+  await page.goto('/');
   await expect(page.locator('#pinBackdrop')).toBeVisible();
   for (const digit of '9999') {
     await page.locator(`[data-pin-key="${digit}"]`).click();
@@ -58,7 +59,6 @@ test('Products inventory list loads seeded product and searches by SKU', async (
   page.on('pageerror', error => uncaughtErrors.push(error.message));
 
   await unlockAsOwner(page);
-  await page.goto('/');
   await expect(page.locator('#main')).toContainText('Dashboard');
   await seedProduct(page);
 
