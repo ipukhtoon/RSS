@@ -310,3 +310,5 @@ test('Cashier can access sales work but owner-only sections redirect safely', as
 });
 
 // QA suite revision: trigger the complete browser test suite on the current branch head.
+
+// Trigger a full pull-request QA run after marking the draft PR ready.
