@@ -101,6 +101,8 @@ test('Owner stock reconciliation creates adjustment batch and audit trail', asyn
   await reconcile.evaluate(el => el.click());
   await resolveOwnerPinIfPrompted(page);
   await resolveAppDialog(page, '12');
+  await page.waitForTimeout(200);
+  expect(runtimeErrors).toEqual([]);
   await resolveAppDialog(page);
   expect(runtimeErrors).toEqual([]);
   await expect.poll(async () => (await readRecord(page, 'products', PRODUCT_ID))?.stock).toBe(12);
