@@ -146,7 +146,6 @@ test('Udhaar return with store credit restores stock and reduces linked customer
   await page.locator('#returnRefundMethod').selectOption('Store credit');
   await page.locator('#confirmReturn').click();
   await resolveAppDialog(page);
-  await resolveAppDialog(page);
   await expect(page.locator('#returnModalBackdrop')).toHaveCount(0);
 
   const returns = await readStore(page, 'returns');
@@ -189,7 +188,6 @@ test('Cash refund against a partially paid Udhaar sale persists the refund and d
   await page.locator('[data-return-index="0"]').fill('1');
   await page.locator('#returnRefundMethod').selectOption('Cash');
   await page.locator('#confirmReturn').click();
-  await resolveAppDialog(page);
   await resolveAppDialog(page);
   await expect(page.locator('#returnModalBackdrop')).toHaveCount(0);
 
