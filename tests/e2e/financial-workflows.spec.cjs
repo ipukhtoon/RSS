@@ -76,7 +76,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
  expect(db.returns.find(r=>r.saleId===cashSale.id).items[0].productId).toBe(product.id);
- const firstReturnedStock=Number(db.returns.find(r=>r.saleId===cashSale.id).items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({saleItems:cashSale.items,expectedAfterCashSale,product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id).items[0]})).toBe(expectedAfterCashSale+firstReturnedStock);
+ const firstReturnedStock=Number(db.returns.find(r=>r.saleId===cashSale.id).items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({saleItems:cashSale.items,expectedAfterCashSale,product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id).items[0]})).toBe(expectedAfterAllSales+firstReturnedStock);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
