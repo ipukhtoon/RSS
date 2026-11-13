@@ -17,9 +17,25 @@ It does not sign into a real store, create sales, modify IndexedDB records, or w
 
 The workflow also runs when this branch is updated and when relevant files are included in a pull request to main.
 
-## Planned test coverage
+## Planned test sequence
 
-Expand the suite incrementally with isolated fixtures and explicit expected-value assertions for products, batches, purchases, sales, partial Udhaar payments, customer ledgers, returns, reports, Data Health, permissions, offline behaviour, and Firebase synchronization.
+Build and verify coverage in this order, using isolated fixtures and explicit expected-value assertions:
+
+1. Products and inventory.
+2. Batches, quantities, and costs.
+3. Purchases and restocking.
+4. Cash and other sales.
+5. Udhaar and partial payments.
+6. Customer ledger.
+7. Returns and stock restoration.
+8. **Udhaar returns** — verify returned quantities, stock restoration, refund/credit treatment, outstanding balance, payment history, and ledger consistency for credit sales.
+9. Reports and profit calculations.
+10. Data Health and reconciliation.
+11. Firebase synchronization and offline operation.
+12. Owner/cashier permissions.
+13. Receipt printing.
+
+A feature is not considered covered merely because its screen opens. Tests must exercise its important workflows, persistence, boundary cases, and effects on related records. For financial and stock workflows, assert both the individual record changes and the resulting cross-feature balances.
 
 ## Safety rules
 
