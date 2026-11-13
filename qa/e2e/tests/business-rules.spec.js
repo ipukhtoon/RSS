@@ -82,7 +82,7 @@ test('Customer ledger displays separate balances for two customers with repaymen
   await expect(page.locator('#ledgerBackdrop')).toContainText('Return · store credit');
   await expect(page.locator('#ledgerBackdrop')).toContainText('Rs 300.00');
 
-  await page.locator('[data-ledger-receipt="qa-sale-one"]').click();
+  await page.locator('[data-ledger-receipt="qa-sale-one"]').first().click();
   await expect(page.locator('#receipt')).toBeVisible();
   await expect(page.locator('#receipt')).toContainText('QA-LEDGER-1');
   await page.locator('#closeReceipt').click();
