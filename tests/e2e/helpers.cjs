@@ -8,29 +8,19 @@ async function unlock(page, pin='9999') {
  await expect(page.locator('#main')).not.toContainText('Starting Ronyal Super Store POS');
 }
 async function navigate(page, view) {
- const clickVisible = async locator => {
-  if (await locator.count()) {
-   const first=locator.first();
-   if (await first.isVisible().catch(()=>false)) { await first.evaluate(el=>el.click()); return true; }
+ const candidates=[
+  page.locator(`#mobileNav [data-view="${view}"]`),
+  page.locator(`#sideNav [data-view="${view}"]`),
+  page.locator(`#mobileMoreMenu [data-view="${view}"]`)
+ ];
+ for(const target of candidates){
+  if(await target.count()){
+   await target.first().evaluate(el=>el.click());
+   await page.waitForTimeout(180);
+   return;
   }
-  return false;
- };
- if (await clickVisible(page.locator(`#mobileNav [data-view="${view}"]`))) { await page.waitForTimeout(180); return; }
- if (await clickVisible(page.locator(`#sideNav [data-view="${view}"]`))) { await page.waitForTimeout(180); return; }
- const more=page.locator('#mobileMoreButton');
- if (await more.count()) {
-  const menu=page.locator('#mobileMoreMenu');
-  if (await menu.evaluate(el=>el.classList.contains('hidden'))) await more.evaluate(el=>el.click());
-  await menu.waitFor({state:'visible'});
-  const target=page.locator(`#mobileMoreMenu [data-view="${view}"]`);
-  await target.waitFor({state:'visible'});
-  await target.evaluate(el=>el.click());
- } else {
-  const target=page.locator(`#sideNav [data-view="${view}"]`);
-  await target.waitFor({state:'attached'});
-  await target.evaluate(el=>el.click());
  }
- await page.waitForTimeout(180);
+ throw new Error('Navigation destination not found: '+view);
 }
 async function readStores(page, names=['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns']) {
  return page.evaluate(async names=>{const req=indexedDB.open('ronyal_super_store_db');const db=await new Promise((resolve,reject)=>{req.onsuccess=()=>resolve(req.result);req.onerror=()=>reject(req.error)});const tx=db.transaction(names,'readonly');const values={};await Promise.all(names.map(name=>new Promise((resolve,reject)=>{const r=tx.objectStore(name).getAll();r.onsuccess=()=>{values[name]=r.result;resolve()};r.onerror=()=>reject(r.error)})));await new Promise((resolve,reject)=>{tx.oncomplete=resolve;tx.onerror=()=>reject(tx.error);tx.onabort=()=>reject(tx.error)});db.close();return values},names);
