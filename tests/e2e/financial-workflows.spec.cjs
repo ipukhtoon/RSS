@@ -1,5 +1,6 @@
 'use strict';
 const {test,expect}=require('@playwright/test');
+const fs=require('node:fs');
 const {unlock,navigate,readStores,seedStores,confirmAppDialog}=require('./helpers.cjs');
 test.beforeEach(async({page})=>{await page.route('https://www.gstatic.com/**',route=>route.abort());});
 test('complete financial journey: product, purchase, cash, Udhaar, repayment, partial returns and reports',async({page})=>{
@@ -197,4 +198,50 @@ test('isolated cash return restores product and batch stock by the exact returne
  expect(ret).toBeTruthy(); expect(ret.items[0].stockQty).toBe(1);
  expect(product.stock,JSON.stringify({product,ret})).toBe(5);
  expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
+});
+
+test('full backup exports all eight stores and restore replaces later changes exactly',async({page})=>{
+ await unlock(page);
+ const date=new Date().toISOString();
+ await seedStores(page,{
+  products:[{id:'backup-p',name:'Backup Fixture',sku:'BACKUP-001',saleMode:'piece',piecePriceEntered:true,price:10,packPrice:10,packSize:1,cost:4,stock:2,batches:[{id:'backup-b',qty:2,costPerPiece:4,expiry:'',receivedAt:date}]}],
+  sales:[{id:'backup-sale',receipt:'RSS-PW-BACKUP-001',date,items:[{productId:'backup-p',name:'Backup Fixture',qty:1,stockQty:1,unitType:'piece',packSize:1,price:10,lineTotal:10,unitCost:4}],subtotal:10,discount:0,total:10,payment:'Cash',status:'completed'}],
+  expenses:[{id:'backup-expense',description:'Backup expense',amount:7,date:date.slice(0,10),category:'Test'}],
+  customers:[{id:'backup-customer',name:'Backup Customer',phone:'03000000002',createdAt:date}],
+  suppliers:[{id:'backup-supplier',name:'Backup Supplier',phone:'03000000003',createdAt:date}],
+  purchases:[{id:'backup-purchase',productId:'backup-p',productName:'Backup Fixture',addedPieces:2,costPerPiece:4,totalCost:8,date:date.slice(0,10),createdAt:date}],
+  creditPayments:[{id:'backup-payment',customerId:'backup-customer',customerName:'Backup Customer',amount:2,date,method:'Cash'}],
+  returns:[{id:'backup-return',saleId:'backup-sale',receipt:'RSS-PW-BACKUP-001',date,items:[],refundTotal:0,refundMethod:'No refund'}]
+ });
+ await navigate(page,'settings');
+ const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#exportBackup').click()]);
+ const backupPath=await download.path(); const backup=JSON.parse(fs.readFileSync(backupPath,'utf8'));
+ expect(backup.app).toBe('Ronyal Super Store POS'); expect(backup.schemaVersion).toBe(5);
+ for(const name of ['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'])expect(backup[name]).toHaveLength(1);
+ await seedStores(page,{products:[{id:'backup-extra',name:'Must Be Removed',sku:'BACKUP-EXTRA',saleMode:'piece',price:1,cost:1,stock:1,batches:[{id:'backup-extra-b',qty:1,costPerPiece:1}]}]});
+ await page.locator('#restoreFile').setInputFiles(backupPath);
+ await page.locator('#restoreBackup').click(); await confirmAppDialog(page,true);
+ await expect(page.locator('#toast')).toContainText('Backup restored successfully');
+ const restored=await readStores(page);
+ for(const name of ['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'])expect(restored[name]).toHaveLength(1);
+ expect(restored.products[0].id).toBe('backup-p');
+});
+test('expiry-aware checkout sells only unexpired batch quantities',async({page})=>{
+ await unlock(page);
+ const expired=new Date();expired.setDate(expired.getDate()-1);
+ const future=new Date();future.setDate(future.getDate()+10);
+ const key=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+ const date=new Date().toISOString();
+ await seedStores(page,{products:[{id:'expiry-p',name:'Expiry Fixture',sku:'EXPIRY-001',saleMode:'piece',piecePriceEntered:true,price:10,packPrice:10,packSize:1,cost:4,stock:5,lowStock:1,batches:[{id:'expired-b',qty:2,costPerPiece:4,expiry:key(expired),receivedAt:date},{id:'valid-b',qty:3,costPerPiece:4,expiry:key(future),receivedAt:date}]}]});
+ await navigate(page,'pos'); await page.locator('#posSearch').fill('Expiry Fixture');
+ await page.locator('#posProducts [data-add-cart]').click();
+ await page.locator('#cartItems [data-plus]').click(); await page.locator('#cartItems [data-plus]').click();
+ await expect(page.locator('#cartCount')).toContainText('3 pieces');
+ await page.locator('#cartItems [data-plus]').click();
+ await expect(page.locator('#toast')).toContainText('Only 3 non-expired piece(s) are available');
+ await page.locator('#cashReceived').fill('30'); await page.locator('#completeSale').click(); await page.locator('#confirmSaleNow').click();
+ await expect(page.locator('#receipt')).toBeVisible();
+ const db=await readStores(page),product=db.products.find(x=>x.id==='expiry-p');
+ expect(product.stock).toBe(2); expect(product.batches.find(b=>b.id==='expired-b').qty).toBe(2);
+ expect(product.batches.find(b=>b.id==='valid-b').qty).toBe(0);
 });
