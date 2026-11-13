@@ -44,3 +44,22 @@ A feature is not considered covered merely because its screen opens. Tests must 
 - Do not treat a passing page-load test as proof that POS calculations are correct.
 - AI-generated findings are recommendations. Review evidence and expected business rules before changing production code.
 - Keep test changes on the QA branch and merge only after review.
+
+## Current automated coverage (development branch)
+
+The suite now includes these browser checks:
+
+- App startup, owner PIN unlock, brand heading, and browser JavaScript errors.
+- Products list using an isolated seeded product: pack/piece stock text, piece price, SKU search, barcode search, and IndexedDB fixture persistence.
+- Product form required fields and cancel-without-write behavior.
+- Batch cost editor display of remaining quantity and current per-piece cost; cancel-without-write behavior.
+- Owner navigation across all application sections.
+- Purchase restock form product search and stock/cost preview; verifies that merely opening the form does not write a purchase or alter stock.
+- Credit/Udhaar customer and repayment search controls, plus return receipt/history search controls.
+- Cashier access to sales work and redirect away from owner-only Reports, Data Health, and Settings.
+
+These are primarily startup, navigation, UI-contract, and non-mutating checks. They do **not** yet prove the correctness of checkout, purchase submission, partial Udhaar collection, repayment allocation, customer balance arithmetic, Udhaar returns, batch depletion, stock reconciliation, profit reports, Firebase convergence, or physical receipt printing. Those require isolated transaction fixtures, deterministic business-rule assertions, and additional tests before any area can be called passed.
+
+## Execution status
+
+The original smoke test passed in GitHub Actions. A later run exposed a malformed test fixture (it seeded the wrong piece-price property); that fixture was corrected. The latest branch commits have not yet returned a GitHub Actions run result through the available GitHub status endpoint, so the expanded suite is **not yet verified green**. Do not treat newly added tests as passing until CI reports the result.
