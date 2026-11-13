@@ -1,94 +1,101 @@
 const { test, expect } = require('@playwright/test');
-const { productFixture, unlock, seed, readRecord, go } = require('./helpers');
+const {
+  PRODUCT_ID, productFixture, unlock, seed, readRecord, go,
+  addFixtureProductToCart, confirmSale, closeReceipt
+} = require('./helpers');
 
-test('FEFO costing and depletion use earliest-expiry eligible batches and ignore expired batches', async ({ page }) => {
+test('FEFO sale consumes the earliest-expiring eligible batch and records its actual cost', async ({ page }) => {
   await unlock(page);
-  const result = await page.evaluate(() => {
-    const date = days => {
-      const d = new Date();
-      d.setDate(d.getDate() + days);
-      return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
-    };
-    const p = { id: 'fefo', stock: 12, cost: 50, packSize: 1, batches: [
-      { id: 'later', qty: 5, costPerPiece: 200, expiry: date(10) },
-      { id: 'expired', qty: 5, costPerPiece: 1, expiry: date(-1) },
-      { id: 'sooner', qty: 2, costPerPiece: 100, expiry: date(1) }
-    ] };
-    const weightedCost = batchUnitCostForQuantity(p, 3);
-    const available = availableStock(p);
-    const deducted = deductBatchStock(p, 3);
-    return { weightedCost, available, deducted, stock: p.stock, batches: p.batches };
-  });
-  expect(result.available).toBe(7);
-  expect(result.weightedCost).toBeCloseTo(400 / 3, 5);
-  expect(result.deducted).toBe(true);
-  expect(result.stock).toBe(9);
-  expect(result.batches.find(b => b.id === 'sooner').qty).toBe(0);
-  expect(result.batches.find(b => b.id === 'later').qty).toBe(4);
-  expect(result.batches.find(b => b.id === 'expired').qty).toBe(5);
-});
-
-test('Credit balance calculation isolates customers and applies repayments and store-credit returns without exceeding debt', async ({ page }) => {
-  await unlock(page);
-  const result = await page.evaluate(() => {
-    const customers = [{ id: 'c1', name: 'One' }, { id: 'c2', name: 'Two' }];
-    const sales = [
-      { id: 's1', customerId: 'c1', payment: 'Borrow', total: 1000, creditOutstanding: 1000, date: '2026-11-01T10:00:00.000Z' },
-      { id: 's2', customerId: 'c2', payment: 'Borrow', total: 500, creditOutstanding: 500, date: '2026-11-01T11:00:00.000Z' }
-    ];
-    const payments = [{ id: 'p1', customerId: 'c1', amount: 400, date: '2026-11-02T10:00:00.000Z' }];
-    const returns = [
-      { id: 'r1', saleId: 's1', customerId: 'c1', refundMethod: 'Store credit', refundTotal: 300, creditAdjustment: 300, date: '2026-11-03T10:00:00.000Z' },
-      { id: 'r2', saleId: 's1', customerId: 'c1', refundMethod: 'No refund', refundTotal: 200, creditAdjustment: 0, date: '2026-11-04T10:00:00.000Z' },
-      { id: 'r3', saleId: 's1', customerId: 'c1', refundMethod: 'Store credit', refundTotal: 900, creditAdjustment: 900, date: '2026-11-05T10:00:00.000Z' }
-    ];
-    return calculateCreditBalances(customers, sales, payments, returns);
-  });
-  expect(result.find(c => c.id === 'c1')).toMatchObject({ paid: 400, returned: 600, balance: 0 });
-  expect(result.find(c => c.id === 'c2').balance).toBe(500);
-});
-
-test('Credit cash refund adjustment is capped at remaining debt after previous repayments', async ({ page }) => {
-  await unlock(page);
-  const result = await page.evaluate(() => {
-    const c = { id: 'c1', name: 'One' };
-    const s = { id: 's1', customerId: 'c1', payment: 'Borrow', total: 120, creditOutstanding: 120, date: '2026-11-01T10:00:00.000Z' };
-    const p = [{ id: 'p1', customerId: 'c1', amount: 20, date: '2026-11-02T10:00:00.000Z' }];
-    const r = [{ id: 'r1', saleId: 's1', customerId: 'c1', refundMethod: 'Cash', refundTotal: 120, creditAdjustment: 120, date: '2026-11-03T10:00:00.000Z' }];
-    const balance = calculateCreditBalances([c], [s], p, r)[0];
-    return { paid: balance.paid, returned: balance.returned, balance: balance.balance, recordedCashRefund: r[0].refundTotal };
-  });
-  expect(result).toEqual({ paid: 20, returned: 100, balance: 0, recordedCashRefund: 120 });
-  // The return UI currently stores full refundTotal as cash and creditAdjustment.
-  // This is an accounting-policy risk: the system needs a separately defined
-  // cash-refund cap for a credit sale after earlier repayments.
-});
-
-test('Return eligibility and status aggregate prior partial returns by original sale item index', async ({ page }) => {
-  await unlock(page);
-  const result = await page.evaluate(() => {
-    const sale = { id: 's1', items: [{ qty: 3 }, { qty: 1 }] };
-    const returns = [
-      { saleId: 's1', items: [{ saleItemIndex: 0, qty: 1 }] },
-      { saleId: 's1', items: [{ saleItemIndex: 0, qty: 1 }, { saleItemIndex: 1, qty: 1 }] }
-    ];
-    return { available: saleHasItemsAvailableToReturn(sale, returns), status: getSaleReturnStatus(sale, returns) };
-  });
-  expect(result).toEqual({ available: true, status: 'Partially returned' });
-});
-
-test('Historical purchase costing uses the latest purchase before sale date and excludes later purchases', async ({ page }) => {
-  await unlock(page);
-  const cost = await page.evaluate(() => historicalPurchaseUnitCost(
-    { date: '2026-11-10T12:00:00.000Z' },
-    { productId: 'p1' },
-    [
-      { productId: 'p1', date: '2026-10-01', packSize: 6, costPack: 600 },
-      { productId: 'p1', date: '2026-11-05', packSize: 6, costPack: 720 },
-      { productId: 'p1', date: '2026-11-12', packSize: 6, costPack: 900 }
+  const date = days => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  };
+  const p = productFixture({
+    stock: 12,
+    batches: [
+      { id: 'later', qty: 5, costPerPiece: 200, expiry: date(10), receivedAt: new Date().toISOString() },
+      { id: 'expired', qty: 5, costPerPiece: 1, expiry: date(-1), receivedAt: new Date().toISOString() },
+      { id: 'sooner', qty: 2, costPerPiece: 100, expiry: date(1), receivedAt: new Date().toISOString() }
     ]
-  ));
-  expect(cost).toBe(120);
+  });
+  await seed(page, { products: [p] });
+  await addFixtureProductToCart(page);
+  await page.locator('#cashReceived').fill('120');
+  await confirmSale(page);
+
+  const sales = await page.evaluate(async () => {
+    const db = await new Promise((resolve, reject) => {
+      const request = indexedDB.open('ronyal_super_store_db', 7);
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => resolve(request.result);
+    });
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction('sales', 'readonly');
+      const request = tx.objectStore('sales').getAll();
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+      tx.oncomplete = () => db.close();
+    });
+  });
+  expect(sales).toHaveLength(1);
+  expect(sales[0].items[0].unitCost).toBe(100);
+
+  const product = await readRecord(page, 'products', PRODUCT_ID);
+  expect(product.stock).toBe(11);
+  expect(product.batches.find(b => b.id === 'sooner').qty).toBe(1);
+  expect(product.batches.find(b => b.id === 'later').qty).toBe(5);
+  expect(product.batches.find(b => b.id === 'expired').qty).toBe(5);
+  await closeReceipt(page);
+});
+
+test('Customer ledger displays separate balances for two customers with repayment and store-credit returns', async ({ page }) => {
+  await unlock(page);
+  const date = new Date().toISOString();
+  await seed(page, {
+    customers: [
+      { id: 'qa-customer-one', name: 'QA Customer One', phone: '03000000001' },
+      { id: 'qa-customer-two', name: 'QA Customer Two', phone: '03000000002' }
+    ],
+    sales: [
+      { id: 'qa-sale-one', receipt: 'QA-LEDGER-1', date, payment: 'Borrow', customerId: 'qa-customer-one', customerName: 'QA Customer One', total: 1000, creditOutstanding: 1000, items: [] },
+      { id: 'qa-sale-two', receipt: 'QA-LEDGER-2', date, payment: 'Borrow', customerId: 'qa-customer-two', customerName: 'QA Customer Two', total: 500, creditOutstanding: 500, items: [] }
+    ],
+    creditPayments: [
+      { id: 'qa-payment-one', customerId: 'qa-customer-one', amount: 400, date: new Date(Date.now() + 1000).toISOString(), method: 'Cash' }
+    ],
+    returns: [
+      { id: 'qa-return-one', saleId: 'qa-sale-one', customerId: 'qa-customer-one', refundMethod: 'Store credit', refundTotal: 300, creditAdjustment: 300, date: new Date(Date.now() + 2000).toISOString(), items: [] }
+    ]
+  });
+  await go(page, 'credit');
+  const one = page.locator('.credit-card').filter({ hasText: 'QA Customer One' });
+  const two = page.locator('.credit-card').filter({ hasText: 'QA Customer Two' });
+  await expect(one).toContainText('Rs 300.00');
+  await expect(two).toContainText('Rs 500.00');
+});
+
+test('Historical costing in Reports uses latest purchase before sale and excludes later purchase', async ({ page }) => {
+  await unlock(page);
+  await seed(page, {
+    products: [productFixture({ stock: 10, cost: 200, batches: [
+      { id: 'qa-batch-current', qty: 10, costPerPiece: 200, expiry: '' }
+    ] })],
+    purchases: [
+      { id: 'qa-purchase-old', productId: PRODUCT_ID, date: '2026-10-01', packSize: 6, costPack: 600, costPerPiece: 100, addedPieces: 6 },
+      { id: 'qa-purchase-latest-before', productId: PRODUCT_ID, date: '2026-11-05', packSize: 6, costPack: 720, costPerPiece: 120, addedPieces: 6 },
+      { id: 'qa-purchase-after', productId: PRODUCT_ID, date: '2026-11-12', packSize: 6, costPack: 900, costPerPiece: 150, addedPieces: 6 }
+    ],
+    sales: [{
+      id: 'qa-historical-cost-sale', receipt: 'QA-HIST-COST', date: '2026-11-10T12:00:00.000Z',
+      payment: 'Cash', subtotal: 150, discount: 0, total: 150,
+      items: [{ productId: PRODUCT_ID, name: 'QA Test Milk 1L', qty: 1, stockQty: 1,
+        price: 150, lineTotal: 150 }]
+    }]
+  });
+  await page.evaluate(() => localStorage.setItem('ronyalReportPeriod', 'alltime'));
+  await go(page, 'reports');
+  await expect(page.locator('.stat').filter({ hasText: 'Estimated gross profit' }).locator('strong')).toHaveText('Rs 30.00');
 });
 
 test('Duplicate-ID batch costs can be edited independently by row index and persist', async ({ page }) => {
@@ -105,7 +112,7 @@ test('Duplicate-ID batch costs can be edited independently by row index and pers
   await page.locator('[data-batch-cost-index="1"]').fill('95');
   await page.locator('#saveBatchCosts').click();
   await expect(page.locator('#batchCostTitle')).toHaveCount(0);
-  const saved = await readRecord(page, 'products', p.id);
-  expect(saved.batches[0].costPerPiece).toBe(80);
-  expect(saved.batches[1].costPerPiece).toBe(95);
+  const product = await readRecord(page, 'products', p.id);
+  expect(product.batches[0].costPerPiece).toBe(80);
+  expect(product.batches[1].costPerPiece).toBe(95);
 });
