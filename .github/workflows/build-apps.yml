@@ -339,7 +339,7 @@ jobs:
 
           version_code = int(os.environ["VERSION_CODE"])
           text, count = re.subn(
-              r"(versionCode\s+)\\d+",
+              r"(versionCode\s+)\d+",
               lambda m: m.group(1) + str(version_code),
               text,
               count=1,
@@ -358,11 +358,11 @@ jobs:
               }
           """
           if "signingConfigs {" not in text:
-              text, count = re.subn(r"(?m)^\s*buildTypes\s*\\{", signing + "\n            buildTypes {", text, count=1)
+              text, count = re.subn(r"(?m)^\s*buildTypes\s*\{", signing + "\n            buildTypes {", text, count=1)
               if count != 1:
                   raise SystemExit("ERROR: Could not locate buildTypes in app/build.gradle.")
 
-          release_block = re.search(r"release\s*\\{", text)
+          release_block = re.search(r"release\s*\{", text)
           if not release_block:
               raise SystemExit("ERROR: Could not locate release build type.")
           insert_at = release_block.end()
