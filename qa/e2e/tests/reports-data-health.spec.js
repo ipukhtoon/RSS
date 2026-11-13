@@ -1,5 +1,5 @@
 const { test, expect } = require('@playwright/test');
-const { PRODUCT_ID, productFixture, unlock, resolveAppDialog, seed, readRecord, go } = require('./helpers');
+const { PRODUCT_ID, productFixture, unlock, resolveOwnerPinIfPrompted, resolveAppDialog, seed, readRecord, go } = require('./helpers');
 
 test('Reports calculate net revenue, returned cost of goods, estimated gross profit and inventory valuation', async ({ page }) => {
   await unlock(page);
@@ -95,6 +95,7 @@ test('Owner stock reconciliation creates adjustment batch and audit trail', asyn
   });
   await go(page, 'dataHealth');
   await page.locator('[data-health-product="' + PRODUCT_ID + '"][data-health-action="reconcile-stock"]').click();
+  await resolveOwnerPinIfPrompted(page);
   await resolveAppDialog(page, '12');
   await resolveAppDialog(page);
   await expect.poll(async () => (await readRecord(page, 'products', PRODUCT_ID))?.stock).toBe(12);
