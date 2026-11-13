@@ -94,7 +94,9 @@ test('Owner stock reconciliation creates adjustment batch and audit trail', asyn
     })]
   });
   await go(page, 'dataHealth');
-  await page.locator('[data-health-product="' + PRODUCT_ID + '"][data-health-action="reconcile-stock"]').click();
+  const reconcile = page.locator('[data-health-product="' + PRODUCT_ID + '"][data-health-action="reconcile-stock"]');
+  await expect.poll(() => reconcile.evaluate(el => typeof el.onclick === 'function')).toBe(true);
+  await reconcile.click();
   await resolveOwnerPinIfPrompted(page);
   await resolveAppDialog(page, '12');
   await resolveAppDialog(page);
