@@ -1,0 +1,250 @@
+'use strict';
+const {test,expect}=require('@playwright/test');
+const fs=require('node:fs');
+const {unlock,navigate,readStores,seedStores,confirmAppDialog}=require('./helpers.cjs');
+test.beforeEach(async({page})=>{await page.route('https://www.gstatic.com/**',route=>route.abort());});
+test('complete financial journey: product, purchase, cash, Udhaar, repayment, partial returns and reports',async({page})=>{
+ await unlock(page);
+ // Product creation with an opening batch.
+ await navigate(page,'products'); await page.locator('#addProduct').click();
+ const form=page.locator('#productForm'); await expect(form).toBeVisible();
+ await form.locator('[name=name]').fill('PW Audit Water'); await form.locator('[name=barcode]').fill('PW-AUDIT-001');
+ await form.locator('[name=saleMode]').selectOption('both'); await form.locator('[name=packSize]').fill('6');
+ await form.locator('[name=price]').fill('20'); await form.locator('[name=packPrice]').fill('120');
+ await form.locator('[name=costPack]').fill('60'); await form.locator('[name=stock]').fill('2');
+ await form.getByRole('button',{name:'Save product'}).click();
+ await expect(page.locator('#productModalBack')).toHaveCount(0);
+ let db=await readStores(page); let product=db.products.find(p=>p.name==='PW Audit Water');
+ expect(product,'created product record').toBeTruthy(); expect(product.stock).toBe(12);
+ expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(12);
+ // Purchase/restock: one six-piece pack and two loose pieces.
+ await navigate(page,'purchases'); await page.locator('#openPurchaseForm').click();
+ await page.locator('#purchaseProductSearch').fill('PW Audit Water');
+ await expect(page.locator('#purchaseProductResults [data-purchase-product]')).toHaveCount(1);
+ await page.locator('#purchaseProductResults [data-purchase-product]').click();
+ const purchase=page.locator('#purchaseForm'); await purchase.locator('[name=packs]').fill('1');
+ await purchase.locator('[name=loosePieces]').fill('2'); await purchase.locator('[name=costPack]').fill('72');
+ await purchase.locator('[name=supplier]').fill('Playwright Supplier'); await purchase.locator('[name=invoice]').fill('PW-INV-001');
+ await purchase.locator('button[type=submit]').click();
+ await page.locator('#keepPrices').click();
+ await expect.poll(async()=>{const state=await readStores(page);const saved=state.purchases.find(x=>x.invoice==='PW-INV-001');return saved?.addedPieces===8&&state.products.find(x=>x.id===product.id)?.stock===20}).toBe(true);
+ db=await readStores(page); product=db.products.find(p=>p.id===product.id);
+ expect(product.stock).toBe(20); expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(20);
+ expect(db.purchases).toHaveLength(1); expect(db.purchases[0].addedPieces).toBe(8);
+ // Cash sale: sell two pieces so each can be returned independently.
+ await navigate(page,'pos'); await page.locator('#posSearch').fill('PW Audit Water');
+ await expect(page.locator('#posProducts [data-add-cart]')).toHaveCount(1);
+ await page.locator('#posProducts [data-add-cart]').click();
+ await page.locator('#cartItems [data-plus]').click();
+ await page.locator('#cashReceived').fill('40'); await page.locator('#completeSale').click();
+ await page.locator('#confirmSaleNow').click(); await expect(page.locator('#receipt')).toBeVisible();
+ await expect(page.locator('#receipt')).toContainText('Rs 40.00');
+ await page.locator('#closeReceipt').click();
+ db=await readStores(page); const cashSale=db.sales.find(s=>s.payment==='Cash'&&s.total===40);
+ expect(cashSale).toBeTruthy(); const cashSaleStockQty=cashSale.items.reduce((n,i)=>n+Number(i.stockQty??(i.unitType==='pack'?Number(i.qty||0)*Number(i.packSize||product.packSize||1):i.qty||0)),0); const expectedAfterCashSale=20-cashSaleStockQty;
+ await expect.poll(async()=> (await readStores(page)).products.find(p=>p.id===product.id)?.stock).toBe(expectedAfterCashSale);
+ // Credit customer and partial-payment Udhaar sale.
+ await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
+ await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
+ await page.locator('#creditCustomerForm').evaluate(form=>form.requestSubmit());
+ await expect(page.locator('#toast')).toContainText('Customer account created',{timeout:8000});
+ await expect.poll(async()=> (await readStores(page)).customers.some(x=>x.name==='PW Audit Buyer')).toBe(true);
+ await navigate(page,'credit'); await expect(page.locator('#creditCustomerList')).toContainText('PW Audit Buyer');
+ await navigate(page,'pos'); await page.locator('#posSearch').fill('PW Audit Water');
+ await page.locator('#posProducts [data-add-cart]').click(); await page.locator('#payment').selectOption('Borrow');
+ await page.locator('#borrowCustomerSearch').fill('PW Audit Buyer');
+ await expect(page.locator('#borrowCustomerResults [data-borrow-customer]')).toHaveCount(1);
+ await page.locator('#borrowCustomerResults [data-borrow-customer]').click();
+ await page.locator('#cashReceived').fill('5'); await page.locator('#completeSale').click();
+ await page.locator('#confirmSaleNow').click(); await expect(page.locator('#receipt')).toBeVisible();
+ await page.locator('#closeReceipt').click();
+ db=await readStores(page); const creditSale=db.sales.find(s=>s.payment==='Borrow'&&s.customerName==='PW Audit Buyer');
+ expect(creditSale).toBeTruthy(); expect(creditSale.total).toBe(20); expect(creditSale.initialPaymentAmount).toBe(5);
+ expect(db.creditPayments.some(p=>p.saleId===creditSale.id&&p.amount===5)).toBeTruthy();
+ const creditSaleStockQty=creditSale.items.reduce((n,i)=>n+Number(i.stockQty??(i.unitType==='pack'?Number(i.qty||0)*Number(i.packSize||product.packSize||1):i.qty||0)),0); const expectedAfterAllSales=expectedAfterCashSale-creditSaleStockQty;
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterAllSales);
+ // Record a separate partial repayment against the customer balance.
+ await navigate(page,'credit');
+ await page.locator('#creditCustomerList .credit-card').filter({hasText:'PW Audit Buyer'}).getByRole('button',{name:/Record repayment/}).click();
+ await page.locator('#creditPaymentForm [name=amount]').fill('5');
+ await page.locator('#creditPaymentForm button[type=submit]').click();
+ db=await readStores(page); expect(db.creditPayments.some(p=>p.customerId===creditSale.customerId&&p.amount===5)).toBeTruthy();
+ // Capture the actual post-sale stock baseline before testing the return delta.
+ const stockBeforeCashReturn=Number(db.products.find(p=>p.id===product.id).stock);
+ // First partial cash return: only one of two pieces, then the remaining piece.
+ await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
+ await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
+ await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
+ await page.locator('#returnRefundMethod').selectOption('Cash');
+ await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
+ db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
+ expect(db.returns.find(r=>r.saleId===cashSale.id).items[0].productId).toBe(product.id);
+ const firstReturnedStock=Number(db.returns.find(r=>r.saleId===cashSale.id).items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({saleItems:cashSale.items,expectedAfterCashSale,product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id).items[0]})).toBe(stockBeforeCashReturn+firstReturnedStock);
+ await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
+ await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
+ await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
+ await page.locator('#returnRefundMethod').selectOption('No refund');
+ await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
+ db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(2);
+ const cashReturnsStock=db.returns.filter(r=>r.saleId===cashSale.id).flatMap(r=>r.items||[]).reduce((n,i)=>n+Number(i.stockQty||0),0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterAllSales+cashReturnsStock);
+ // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
+ await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
+ await page.locator(`[data-return-sale="${creditSale.id}"]`).first().evaluate(el=>el.click());
+ await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
+ await page.locator('#returnRefundMethod').selectOption('Cash');
+ await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
+ db=await readStores(page); const creditReturn=db.returns.find(r=>r.saleId===creditSale.id);
+ expect(creditReturn).toBeTruthy(); expect(creditReturn.creditAdjustment).toBe(20);
+ const creditReturnStock=Number(creditReturn.items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterAllSales+cashReturnsStock+creditReturnStock);
+ // Verify customer ledger renders, receipts are available, and balance is never negative.
+ await navigate(page,'credit'); await page.locator('#creditCustomerSearch').fill('PW Audit Buyer');
+ await expect(page.locator('#creditCustomerList')).toContainText('PW Audit Buyer');
+ expect(db.creditPayments.filter(p=>p.customerId===creditSale.customerId).reduce((n,p)=>n+Number(p.amount||0),0)).toBe(10);
+ expect(db.returns.filter(r=>r.customerId===creditSale.customerId&&r.refundMethod!=='No refund').reduce((n,r)=>n+Number(r.creditAdjustment||0),0)).toBe(20);
+ // Reports: exercise all-time period selector and assert report content renders.
+ await navigate(page,'reports'); await page.locator('#reportPeriodTrigger').click();
+ await page.locator('[data-report-period="alltime"]').click();
+ await expect(page.locator('#main')).toContainText(/Net sales revenue/i);
+ await page.locator('#expenseForm [name=description]').fill('PW Audit Electricity');
+ await page.locator('#expenseForm [name=amount]').fill('125');
+ await page.locator('#expenseForm [name=category]').fill('Utilities');
+ await page.locator('#expenseForm button').click();
+ db=await readStores(page); expect(db.expenses.some(e=>e.description==='PW Audit Electricity'&&e.amount===125)).toBeTruthy();
+ // Data Health must render without mutating the fixture records.
+ await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Data Health');
+ const afterHealth=await readStores(page); expect(afterHealth.sales).toHaveLength(db.sales.length);
+});
+test('cashier role is blocked from owner-only reports, settings and Data Health',async({page})=>{
+ await unlock(page,'1234'); await navigate(page,'reports');
+ await expect(page.locator('#pinBackdrop')).toBeVisible();
+ await expect(page.locator('#pinTitle')).toContainText('Owner Access Required');
+ await page.locator('#cancelPinPrompt').click();
+ await expect(page.locator('#pinBackdrop')).toHaveCount(0);
+ await expect(page.locator('#main')).not.toContainText('Gross revenue');
+});
+test('offline browser session can complete a local sale and preserve IndexedDB data',async({page,context})=>{
+ await unlock(page);
+ await seedStores(page,{products:[{id:'offline-p',name:'Offline Test Item',sku:'OFFLINE-001',barcode:'OFFLINE-001',saleMode:'piece',piecePriceEntered:true,price:15,packPrice:15,packSize:1,cost:7,stock:3,lowStock:1,batches:[{id:'offline-b',qty:3,costPerPiece:7,expiry:'',receivedAt:new Date().toISOString()}]}]});
+ await context.setOffline(true); await navigate(page,'pos'); await page.locator('#posSearch').fill('Offline Test Item');
+ await page.locator('#posProducts [data-add-cart]').click(); await page.locator('#cashReceived').fill('15');
+ await page.locator('#completeSale').click(); await page.locator('#confirmSaleNow').click();
+ await expect(page.locator('#receipt')).toBeVisible();
+ const db=await readStores(page); expect(db.sales.some(s=>s.items.some(i=>i.productId==='offline-p'))).toBeTruthy();
+ expect(db.products.find(p=>p.id==='offline-p').stock).toBe(2);
+});
+test('receipt contains two print copies and invokes browser print without changing saved sale',async({page})=>{
+ await page.addInitScript(()=>{window.__pwPrintCalled=false;window.print=()=>{window.__pwPrintCalled=true}});
+ await unlock(page);
+ await seedStores(page,{products:[{id:'print-p',name:'Print Test Item',sku:'PRINT-001',saleMode:'piece',piecePriceEntered:true,price:25,packPrice:25,packSize:1,cost:10,stock:2,lowStock:1,batches:[{id:'print-b',qty:2,costPerPiece:10,expiry:'',receivedAt:new Date().toISOString()}]}]});
+ await navigate(page,'pos'); await page.locator('#posSearch').fill('Print Test Item');
+ await page.locator('#posProducts [data-add-cart]').click(); await page.locator('#cashReceived').fill('25');
+ await page.locator('#completeSale').click(); await page.locator('#confirmSaleNow').click();
+ await expect(page.locator('#receipt .receipt-print-copies .receipt-copy')).toHaveCount(2);
+ const before=await readStores(page); await page.locator('#printReceipt').click();
+ expect(await page.evaluate(()=>window.__pwPrintCalled)).toBe(true);
+ const after=await readStores(page); expect(after.sales).toHaveLength(before.sales.length);
+});
+test('mobile navigation exposes secondary POS destinations through More',async({page})=>{
+ await page.setViewportSize({width:390,height:844}); await unlock(page); await expect(page.locator('#mobileNav')).toBeVisible();
+ await page.locator('#mobileMoreButton').click();
+ await expect(page.locator('#mobileMoreMenu')).toBeVisible();
+ await expect(page.locator('#mobileMoreMenu [data-view="returns"]')).toBeVisible();
+ await page.locator('#mobileMoreMenu [data-view="returns"]').click();
+ await expect(page.locator('#main')).toContainText('Returns');
+});
+test('Data Health reconciliation and independent batch-cost correction persist exact values',async({page})=>{
+ await unlock(page);
+ await seedStores(page,{products:[
+  {id:'health-stock-p',name:'Health Stock Mismatch',sku:'HEALTH-STOCK',saleMode:'piece',piecePriceEntered:true,price:30,packPrice:30,packSize:1,cost:10,stock:5,lowStock:1,batches:[{id:'health-stock-b',qty:3,costPerPiece:10,expiry:'',receivedAt:new Date().toISOString()}]},
+  {id:'health-cost-p',name:'Health Batch Cost',sku:'HEALTH-COST',saleMode:'piece',piecePriceEntered:true,price:30,packPrice:30,packSize:1,cost:10,stock:2,lowStock:1,batches:[{id:'health-cost-b',qty:2,costPerPiece:100,expiry:'',receivedAt:new Date().toISOString()}]}
+ ]});
+ await navigate(page,'dataHealth');
+ await expect(page.locator('#main')).toContainText('Stock / batch mismatch');
+ await page.locator('[data-health-product="health-stock-p"][data-health-action="reconcile-stock"]').click();
+ await expect(page.locator('.app-dialog-input')).toBeVisible(); await page.locator('.app-dialog-input').fill('5');
+ await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Continue'}).click();
+ await expect(page.locator('.app-dialog-backdrop')).toBeVisible(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('.app-dialog-backdrop')).toHaveCount(0);
+ let db=await readStores(page); let p=db.products.find(x=>x.id==='health-stock-p');
+ expect(p.stock).toBe(5); expect(p.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
+ await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Batch cost outlier');
+ await page.locator('[data-health-product="health-cost-p"][data-health-action="batch-costs"]').click();
+ await page.locator('[data-batch-cost-index="0"]').fill('12.50');
+ await page.locator('#saveBatchCosts').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
+ db=await readStores(page); p=db.products.find(x=>x.id==='health-cost-p');
+ expect(p.batches[0].costPerPiece).toBe(12.5); expect(p.batches[0].costAudit).toHaveLength(1);
+});
+test('owner sale deletion restores inventory exactly once and retains reversal trace',async({page})=>{
+ await unlock(page);
+ const date=new Date().toISOString();
+ await seedStores(page,{products:[{id:'reverse-p',name:'Reversal Fixture',sku:'REV-001',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'reverse-original-batch',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'reverse-sale',receipt:'RSS-PW-REV-001',date,items:[{productId:'reverse-p',name:'Reversal Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
+ await navigate(page,'sales'); const deleteButton=page.locator('.sales-mobile-cards [data-delete-sale="reverse-sale"], .sales-desktop-table [data-delete-sale="reverse-sale"]').filter({visible:true}).first();
+ await expect(deleteButton).toBeVisible(); await deleteButton.click();
+ await page.locator('#confirmDeleteSale').click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
+ let db=await readStores(page); expect(db.sales.some(s=>s.id==='reverse-sale')).toBe(false);
+ let product=db.products.find(p=>p.id==='reverse-p'); expect(product.stock).toBe(6);
+ expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(6);
+ expect(product.batches.filter(b=>String(b.id).startsWith('sale-reversal-reverse-sale-'))).toHaveLength(1);
+});
+test('isolated cash return restores product and batch stock by the exact returned quantity',async({page})=>{
+ await unlock(page);
+ const date=new Date().toISOString();
+ await seedStores(page,{products:[{id:'return-stock-p',name:'Return Stock Fixture',sku:'RETURN-STOCK',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'return-stock-b',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'return-stock-sale',receipt:'RSS-PW-RETURN-001',date,items:[{productId:'return-stock-p',name:'Return Stock Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
+ await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill('RSS-PW-RETURN-001');
+ await page.locator('[data-return-sale="return-stock-sale"]').first().evaluate(el=>el.click());
+ await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
+ await page.locator('#returnRefundMethod').selectOption('Cash');
+ await page.locator('#confirmReturn').click();
+ await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
+ await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
+ const db=await readStores(page),product=db.products.find(x=>x.id==='return-stock-p'),ret=db.returns.find(x=>x.saleId==='return-stock-sale');
+ expect(ret).toBeTruthy(); expect(ret.items[0].stockQty).toBe(1);
+ expect(product.stock,JSON.stringify({product,ret})).toBe(5);
+ expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
+});
+
+test('full backup exports all eight stores and restore replaces later changes exactly',async({page})=>{
+ await unlock(page);
+ const date=new Date().toISOString();
+ await seedStores(page,{
+  products:[{id:'backup-p',name:'Backup Fixture',sku:'BACKUP-001',saleMode:'piece',piecePriceEntered:true,price:10,packPrice:10,packSize:1,cost:4,stock:2,batches:[{id:'backup-b',qty:2,costPerPiece:4,expiry:'',receivedAt:date}]}],
+  sales:[{id:'backup-sale',receipt:'RSS-PW-BACKUP-001',date,items:[{productId:'backup-p',name:'Backup Fixture',qty:1,stockQty:1,unitType:'piece',packSize:1,price:10,lineTotal:10,unitCost:4}],subtotal:10,discount:0,total:10,payment:'Cash',status:'completed'}],
+  expenses:[{id:'backup-expense',description:'Backup expense',amount:7,date:date.slice(0,10),category:'Test'}],
+  customers:[{id:'backup-customer',name:'Backup Customer',phone:'03000000002',createdAt:date}],
+  suppliers:[{id:'backup-supplier',name:'Backup Supplier',phone:'03000000003',createdAt:date}],
+  purchases:[{id:'backup-purchase',productId:'backup-p',productName:'Backup Fixture',addedPieces:2,costPerPiece:4,totalCost:8,date:date.slice(0,10),createdAt:date}],
+  creditPayments:[{id:'backup-payment',customerId:'backup-customer',customerName:'Backup Customer',amount:2,date,method:'Cash'}],
+  returns:[{id:'backup-return',saleId:'backup-sale',receipt:'RSS-PW-BACKUP-001',date,items:[],refundTotal:0,refundMethod:'No refund'}]
+ });
+ await navigate(page,'settings');
+ const [download]=await Promise.all([page.waitForEvent('download'),page.locator('#exportBackup').click()]);
+ const backupPath=await download.path(); const backup=JSON.parse(fs.readFileSync(backupPath,'utf8'));
+ expect(backup.app).toBe('Ronyal Super Store POS'); expect(backup.schemaVersion).toBe(5);
+ for(const name of ['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'])expect(backup[name]).toHaveLength(1);
+ await seedStores(page,{products:[{id:'backup-extra',name:'Must Be Removed',sku:'BACKUP-EXTRA',saleMode:'piece',price:1,cost:1,stock:1,batches:[{id:'backup-extra-b',qty:1,costPerPiece:1}]}]});
+ await page.locator('#restoreFile').setInputFiles(backupPath);
+ await page.locator('#restoreBackup').click(); await confirmAppDialog(page,true);
+ await expect(page.locator('#toast')).toContainText('Backup restored successfully');
+ const restored=await readStores(page);
+ for(const name of ['products','sales','expenses','customers','suppliers','purchases','creditPayments','returns'])expect(restored[name]).toHaveLength(1);
+ expect(restored.products[0].id).toBe('backup-p');
+});
+test('expiry-aware checkout sells only unexpired batch quantities',async({page})=>{
+ await unlock(page);
+ const expired=new Date();expired.setDate(expired.getDate()-1);
+ const future=new Date();future.setDate(future.getDate()+10);
+ const key=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+ const date=new Date().toISOString();
+ await seedStores(page,{products:[{id:'expiry-p',name:'Expiry Fixture',sku:'EXPIRY-001',saleMode:'piece',piecePriceEntered:true,price:10,packPrice:10,packSize:1,cost:4,stock:5,lowStock:1,batches:[{id:'expired-b',qty:2,costPerPiece:4,expiry:key(expired),receivedAt:date},{id:'valid-b',qty:3,costPerPiece:4,expiry:key(future),receivedAt:date}]}]});
+ await navigate(page,'pos'); await page.locator('#posSearch').fill('Expiry Fixture');
+ const addPiece=page.locator('#posProducts [data-add-cart]');
+ await addPiece.click(); await expect(page.locator('#cartCount')).toHaveText('1 pieces');
+ await addPiece.click(); await expect(page.locator('#cartCount')).toHaveText('2 pieces');
+ await addPiece.click(); await expect(page.locator('#cartCount')).toHaveText('3 pieces');
+ await addPiece.click();
+ await expect(page.locator('#toast')).toContainText('Only 3 non-expired piece(s) are available');
+ await page.locator('#cashReceived').fill('30'); await page.locator('#completeSale').click(); await page.locator('#confirmSaleNow').click();
+ await expect(page.locator('#receipt')).toBeVisible();
+ const db=await readStores(page),product=db.products.find(x=>x.id==='expiry-p');
+ expect(product.stock).toBe(2); expect(product.batches.find(b=>b.id==='expired-b').qty).toBe(2);
+ expect(product.batches.find(b=>b.id==='valid-b').qty).toBe(0);
+});
