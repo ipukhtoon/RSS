@@ -14,7 +14,7 @@ function walk(suite, parents = []) {
     const result = item.results && item.results[item.results.length - 1] || {};
     tests.push({
       title: [...parents, spec.title].filter(Boolean).join(' › '),
-      status: item.status || result.status || 'unknown',
+      status: (result.status || 'unknown') === (item.expectedStatus || 'passed') ? ((item.expectedStatus || 'passed') === 'failed' ? 'expected failure' : (result.status || 'unknown')) : ((result.status || 'unknown') === 'passed' ? 'unexpected pass' : 'failed'),
       duration: result.duration || 0,
       error: result.error && (result.error.message || result.error.stack) || ''
     });
@@ -36,7 +36,7 @@ const lines = [
   '', '| Test | Result | Duration |', '|---|---:|---:|'
 ];
 for (const item of tests) lines.push('| ' + item.title.replace(/\|/g, '\\|') + ' | ' + item.status + ' | ' + (item.duration / 1000).toFixed(2) + 's |');
-const failures = tests.filter(item => ['failed', 'timedOut', 'interrupted'].includes(item.status));
+const failures = tests.filter(item => ['failed', 'timedOut', 'interrupted', 'unexpected pass'].includes(item.status));
 if (failures.length) {
   lines.push('', '## Failure details', '');
   for (const item of failures) lines.push('### ' + item.title, '', '<pre>', item.error || 'No error detail supplied.', '</pre>', '');
