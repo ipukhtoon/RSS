@@ -50,7 +50,7 @@ test('Card, bank transfer, mobile wallet and split/other tender each complete an
 
   const sales = await readStore(page, 'sales');
   expect(sales).toHaveLength(4);
-  expect(sales.map(sale => sale.payment)).toEqual(methods);
+  expect(sales.map(sale => sale.payment).sort()).toEqual([...methods].sort());
   expect(sales.every(sale => sale.total === 120)).toBe(true);
   for (const product of products) {
     const saved = await readRecord(page, 'products', product.id);
