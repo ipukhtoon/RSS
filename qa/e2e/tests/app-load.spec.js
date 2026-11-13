@@ -302,6 +302,9 @@ test('Cashier can access sales work but owner-only sections redirect safely', as
 
   for (const id of ['reports', 'dataHealth', 'settings']) {
     await page.locator('#sideNav').locator('[data-view="' + id + '"]').click();
+    await expect(page.locator('#pinBackdrop')).toBeVisible();
+    await expect(page.locator('#pinTitle')).toHaveText('Owner Access Required');
+    await page.locator('#cancelPinPrompt').click();
     await expect(page.locator('#main')).toContainText('Dashboard');
     await expect(page.locator('#sideNav').locator('[data-view="dashboard"]')).toHaveClass(/active/);
   }
