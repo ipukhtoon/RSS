@@ -1870,7 +1870,7 @@ document.getElementById('lockPosButton')?.addEventListener('click',async()=>{cle
   const top=popups[popups.length-1];
   if(isProtectedPopup(top))return false;
   const buttons=Array.from(top.querySelectorAll('button'));
-  const closeButton=buttons.find(b=>/^(✕|×|close|cancel|back|discard)$/i.test((b.textContent||'').trim())||/close|cancel|back/i.test((b.id||'')+' '+(b.getAttribute('aria-label')||'')));
+  const closeButton=buttons.find(b=>/^(✕|×|close|cancel|back|discard|ok)$/i.test((b.textContent||'').trim())||/close|cancel|back/i.test((b.id||'')+' '+(b.getAttribute('aria-label')||'')));
   if(closeButton){closeButton.click();return true;}
   // Fallback for simple confirmation overlays that do not expose a close control.
   const id=top.id;
