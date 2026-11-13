@@ -73,6 +73,21 @@ test('Customer ledger displays separate balances for two customers with repaymen
   const two = page.locator('.credit-card').filter({ hasText: 'QA Customer Two' });
   await expect(one).toContainText('Rs 300.00');
   await expect(two).toContainText('Rs 500.00');
+
+  await one.locator('[data-credit-history="qa-customer-one"]').click();
+  await expect(page.locator('#ledgerBackdrop')).toBeVisible();
+  await expect(page.locator('#ledgerTitle')).toHaveText('Customer ledger');
+  await expect(page.locator('#ledgerBackdrop')).toContainText('Credit sale');
+  await expect(page.locator('#ledgerBackdrop')).toContainText('Repayment');
+  await expect(page.locator('#ledgerBackdrop')).toContainText('Return · store credit');
+  await expect(page.locator('#ledgerBackdrop')).toContainText('Rs 300.00');
+
+  await page.locator('[data-ledger-receipt="qa-sale-one"]').click();
+  await expect(page.locator('#receipt')).toBeVisible();
+  await expect(page.locator('#receipt')).toContainText('QA-LEDGER-1');
+  await page.locator('#closeReceipt').click();
+  await page.locator('#closeLedger').click();
+  await expect(page.locator('#ledgerBackdrop')).toHaveCount(0);
 });
 
 test('Historical costing in Reports uses latest purchase before sale and excludes later purchase', async ({ page }) => {
