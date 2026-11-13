@@ -39,6 +39,14 @@ async function unlock(page, role = 'owner') {
   }
   await expect(page.locator('#pinBackdrop')).toHaveCount(0);
 }
+async function resolveOwnerPinIfPrompted(page) {
+  const pin = page.locator('#pinBackdrop');
+  if (await pin.count()) {
+    await expect(pin).toBeVisible();
+    for (const digit of '9999') await page.locator('[data-pin-key="' + digit + '"]').click();
+    await expect(pin).toHaveCount(0);
+  }
+}
 async function resolveAppDialog(page, promptValue = '12') {
   const dialog = page.locator('.app-dialog-backdrop').last();
   await expect(dialog).toBeVisible();
@@ -129,6 +137,6 @@ async function closeReceipt(page) {
 }
 module.exports = {
   DB_NAME, DB_VERSION, PRODUCT_ID, CUSTOMER_ID, productFixture, customerFixture,
-  unlock, resolveAppDialog, seed, readStore, readRecord, go,
+  unlock, resolveOwnerPinIfPrompted, resolveAppDialog, seed, readStore, readRecord, go,
   addFixtureProductToCart, confirmSale, closeReceipt
 };
