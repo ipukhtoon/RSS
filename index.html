@@ -1436,7 +1436,7 @@ async function reconcileProductStock(productId){
  if(batchTotal===currentStock){toast('This product is already reconciled.');await render();return}
  const raw=await appPrompt('PHYSICAL COUNT REQUIRED\n\n'+String(product.name||'Product')+'\nCurrent product stock: '+currentStock+' pieces\nCurrent batch total: '+batchTotal+' pieces\n\nEnter the physically verified quantity (pieces). Do not enter an estimate.',''+currentStock);
  if(raw===null)return;
- const value=String(raw).trim();if(!/^\\d+$/.test(value)){toast('Enter a whole number of pieces. No changes were made.');return}
+ const value=String(raw).trim();if(!/^\d+$/.test(value)){toast('Enter a whole number of pieces. No changes were made.');return}
  const counted=Number(value);if(!Number.isSafeInteger(counted)||counted<0){toast('Invalid physical quantity. No changes were made.');return}
  const delta=counted-batchTotal,now=new Date().toISOString(),changes=[];
  let nextBatches=batches.map(b=>({...b}));
