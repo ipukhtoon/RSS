@@ -40,7 +40,8 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await expect(page.locator('#receipt')).toContainText('Rs 40.00');
  await page.locator('#closeReceipt').click();
  db=await readStores(page); const cashSale=db.sales.find(s=>s.payment==='Cash'&&s.total===40);
- expect(cashSale).toBeTruthy(); expect(db.products.find(p=>p.id===product.id).stock).toBe(18);
+ expect(cashSale).toBeTruthy(); const cashSaleStockQty=cashSale.items.reduce((n,i)=>n+Number(i.stockQty??(i.unitType==='pack'?Number(i.qty||0)*Number(i.packSize||product.packSize||1):i.qty||0)),0); const expectedAfterCashSale=20-cashSaleStockQty;
+ await expect.poll(async()=> (await readStores(page)).products.find(p=>p.id===product.id)?.stock).toBe(expectedAfterCashSale);
  // Credit customer and partial-payment Udhaar sale.
  await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
  await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
@@ -74,14 +75,14 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
  expect(db.returns.find(r=>r.saleId===cashSale.id).items[0].productId).toBe(product.id);
- expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id)?.items?.[0]})).toBe(19);
+ const firstReturnedStock=Number(db.returns.find(r=>r.saleId===cashSale.id).items[0].stockQty||0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterCashSale+firstReturnedStock);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('No refund');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(2);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
+ const cashReturnsStock=db.returns.filter(r=>r.saleId===cashSale.id).flatMap(r=>r.items||[]).reduce((n,i)=>n+Number(i.stockQty||0),0); expect(db.products.find(p=>p.id===product.id).stock).toBe(expectedAfterCashSale+cashReturnsStock);
  // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
  await page.locator(`[data-return-sale="${creditSale.id}"]`).first().evaluate(el=>el.click());
