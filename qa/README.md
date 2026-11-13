@@ -4,9 +4,9 @@ This QA suite is deliberately isolated from the production POS data.
 
 ## What currently runs
 
-The initial Playwright smoke test serves the checked-out repository revision locally inside GitHub Actions. It verifies the document title, main POS shell, brand heading, and uncaught browser JavaScript errors.
+The Playwright suite serves the checked-out repository revision locally inside GitHub Actions. Current tests cover app startup/owner unlock and read-only Products inventory rendering using a seeded product in a fresh browser context. They check pack/piece stock text, piece price, SKU and barcode search, fixture persistence, and uncaught browser JavaScript errors.
 
-It does not sign into a real store, create sales, modify IndexedDB records, or write to the production Firebase store.
+The inventory fixture is written only to the isolated Playwright browser context's IndexedDB. Tests do not use a real store Sync ID or write to production Firebase. No sale, purchase, return, payment, or report workflow is covered yet.
 
 ## Run it
 
@@ -19,7 +19,7 @@ The workflow also runs when this branch is updated and when relevant files are i
 
 ## Planned test sequence
 
-Build and verify coverage in this order, using isolated fixtures and explicit expected-value assertions:
+Complete the remaining end-to-end coverage in this order, using isolated fixtures and explicit expected-value assertions. The Products/inventory area has initial read-only coverage only; product create/edit/delete and stock adjustments still need tests:
 
 1. Products and inventory.
 2. Batches, quantities, and costs.
