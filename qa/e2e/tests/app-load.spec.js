@@ -43,8 +43,8 @@ test('POS loads and renders its main application shell', async ({ page }) => {
   const uncaughtErrors = [];
   page.on('pageerror', error => uncaughtErrors.push(error.message));
 
-  await unlockAsOwner(page);
   await page.goto('/');
+  await unlockAsOwner(page);
   await expect(page).toHaveTitle('Ronyal Super Store');
   await expect(page.locator('.app')).toBeVisible();
   await expect(page.locator('.top h1')).toHaveText('Ronyal Super Store');
