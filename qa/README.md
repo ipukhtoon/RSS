@@ -1,78 +1,54 @@
-# Ronyal Super Store QA
+# Ronyal Super Store POS — Playwright QA
 
-This QA suite is deliberately isolated from the production POS data.
+This branch contains an isolated browser QA environment for the Ronyal Super Store POS. It is not merged into production.
 
-## What currently runs
+## Run locally or in GitHub Actions
 
-The Playwright suite serves the checked-out repository revision locally inside GitHub Actions. Current tests cover app startup/owner unlock and read-only Products inventory rendering using a seeded product in a fresh browser context. They check pack/piece stock text, piece price, SKU and barcode search, fixture persistence, and uncaught browser JavaScript errors.
+- Workflow: **Ronyal POS Automated QA**.
+- Trigger: push to `pos-automated-qa`, pull request to `main`, or manual workflow dispatch.
+- Runtime: Node 22 + Playwright Chromium.
+- Test app: local static server at `127.0.0.1:4173`.
+- Isolation: fresh Playwright browser contexts and a dedicated seeded IndexedDB database per test; service workers are blocked.
+- Evidence: HTML report, JSON results, failure screenshots, traces and videos.
+- Consolidated Markdown report: `qa/AUDIT-REPORT.md` (generated from the Playwright JSON output and included in the workflow artifact).
 
-The inventory fixture is written only to the isolated Playwright browser context's IndexedDB. Tests do not use a real store Sync ID or write to production Firebase. No sale, purchase, return, payment, or report workflow is covered yet.
+Download the `ronyal-pos-qa-report` artifact from the completed Actions run. The coverage matrix is in `qa/COVERAGE-MATRIX.md`.
 
-## Run it
+## Automated workflow coverage
 
-1. Open the repository's **Actions** tab.
-2. Select **Ronyal POS Automated QA**.
-3. Select **Run workflow** and choose the `pos-automated-qa` branch.
-4. Open the completed run and download the `ronyal-pos-qa-report` artifact.
+The current suite includes real browser workflows and persisted-record assertions for:
 
-The workflow also runs when this branch is updated and when relevant files are included in a pull request to main.
+1. Products and inventory display/search, plus product form validation/cancel.
+2. FEFO batch cost valuation and stock depletion, expired-batch exclusion, duplicate-ID batch cost editing.
+3. Purchase submission with pack and loose-piece conversion, supplier/invoice, cost and batch-stock reconciliation.
+4. Cash checkout, sale-time cost snapshot, change, stock deduction and underpayment rejection.
+5. Udhaar checkout with initial partial payment, later repayment and overpayment guard.
+6. Customer balance arithmetic and customer isolation.
+7. Cash/store-credit returns, stock restoration, repeated partial returns and return quantity caps.
+8. Udhaar returns with store-credit debt reduction, plus cash-refund-after-partial-payment audit scenario.
+9. Reports: net revenue, returned COGS, estimated gross profit, inventory cost/retail valuation and older-sale return period policy.
+10. Data Health diagnostics and owner physical stock reconciliation with audit trail.
+11. Offline local IndexedDB availability.
+12. Owner/cashier access boundaries.
+13. Receipt DOM, browser print adapter and mocked Android native bridge invocation.
 
-## Planned test sequence
+A test passes only when its explicit assertions pass. The generated report lists each executed case and its result.
 
-Complete the remaining end-to-end coverage in this order, using isolated fixtures and explicit expected-value assertions. The Products/inventory area has initial read-only coverage only; product create/edit/delete and stock adjustments still need tests:
+## Important limitations — never mislabel these as passed
 
-1. Products and inventory.
-2. Batches, quantities, and costs.
-3. Purchases and restocking.
-4. Cash and other sales.
-5. Udhaar and partial payments.
-6. Customer ledger.
-7. Returns and stock restoration.
-8. **Udhaar returns** — verify returned quantities, stock restoration, refund/credit treatment, outstanding balance, payment history, and ledger consistency for credit sales.
-9. Reports and profit calculations.
-10. Data Health and reconciliation.
-11. Firebase synchronization and offline operation.
-12. Owner/cashier permissions.
-13. Receipt printing.
+- **Firebase cloud sync is not yet executed.** No production Sync ID is loaded. A dedicated Firebase Emulator or isolated test Firebase project is required to prove Firestore upload/download, offline queue replay, conflict resolution and multi-device convergence.
+- **Physical receipt printing is not executed.** Browser printing and the Android bridge are tested with mocks; a real Android APK, Android PrintManager and 58/88mm printer are required to verify paper output.
+- The suite does not certify every possible product, payment, date-period, purchase-edit, PIN recovery, or concurrency edge case. Review the coverage matrix.
+- A green CI run proves only the named assertions in that run, not the whole POS in every environment.
 
-A feature is not considered covered merely because its screen opens. Tests must exercise its important workflows, persistence, boundary cases, and effects on related records. For financial and stock workflows, assert both the individual record changes and the resulting cross-feature balances.
+## Financial review item
 
-## Safety rules
+The Udhaar cash-refund scenario records a full item refund in `refundTotal` and `creditAdjustment`, while the balance calculation caps the debt reduction at the remaining outstanding amount. For a partially paid Rs 120 credit sale with Rs 20 previously collected, the current code can record Rs 120 cash refund while reducing only Rs 100 of debt. The test preserves evidence of this current behaviour; the correct cash-refund policy (cash refund capped to payments received, store credit, or another explicit accounting rule) requires owner decision before any production fix.
 
-- Never point destructive tests at the live store's Firebase Sync ID.
-- Use a dedicated test store/database or a fully mocked persistence layer before adding write-flow tests.
-- Do not treat a passing page-load test as proof that POS calculations are correct.
-- AI-generated findings are recommendations. Review evidence and expected business rules before changing production code.
-- Keep test changes on the QA branch and merge only after review.
+## Safety boundaries
 
-## Current automated coverage (development branch)
-
-The suite now includes these browser checks:
-
-- App startup, owner PIN unlock, brand heading, and browser JavaScript errors.
-- Products list using an isolated seeded product: pack/piece stock text, piece price, SKU search, barcode search, and IndexedDB fixture persistence.
-- Product form required fields and cancel-without-write behavior.
-- Batch cost editor display of remaining quantity and current per-piece cost; cancel-without-write behavior.
-- Owner navigation across all application sections.
-- Purchase restock form product search and stock/cost preview; verifies that merely opening the form does not write a purchase or alter stock.
-- Credit/Udhaar customer and repayment search controls, plus return receipt/history search controls.
-- Cashier access to sales work and redirect away from owner-only Reports, Data Health, and Settings.
-
-These are primarily startup, navigation, UI-contract, and non-mutating checks. They do **not** yet prove the correctness of checkout, purchase submission, partial Udhaar collection, repayment allocation, customer balance arithmetic, Udhaar returns, batch depletion, stock reconciliation, profit reports, Firebase convergence, or physical receipt printing. Those require isolated transaction fixtures, deterministic business-rule assertions, and additional tests before any area can be called passed.
-
-## Execution status
-
-The expanded browser suite completed successfully in GitHub Actions run 44 (commit `ec1c076d71830a5b78bf803248e4cf79c0da093c`): **8 passed, 0 failed**. The run completed on 2026-11-13 in 16.1 seconds.
-
-Earlier runs exposed two QA-test defects, not confirmed POS defects:
-- The seeded product's search-token fixture did not contain the trigrams required by the purchase search index. The fixture was corrected to generate the same word and trigram tokens as the application.
-- The cashier permission test expected an immediate redirect, but the application correctly presents an Owner Access Required PIN challenge. The test now verifies the challenge and cancels it before checking the safe return to Dashboard.
-
-The eight passing tests cover application startup, Products inventory display/search, product form cancellation, batch-cost editor display/cancel, owner navigation, purchase preview without writes, Credit/Udhaar and Returns screen controls, and cashier owner-access boundaries.
-
-**Important:** 8/8 passing does not mean the full requested POS audit is complete. Checkout persistence, purchase submission, partial payment allocation, customer ledger arithmetic, Udhaar return stock/refund behaviour, report calculations, Data Health reconciliation writes, Firebase multi-device/offline convergence, and physical printer output still need dedicated end-to-end or device tests.
-
-
-## Financial and return audit status
-
-Static source inspection confirms the sale transaction writes product stock, sale record, and initial checkout repayment in one IndexedDB transaction. Return processing re-reads prior returns and product records inside a transaction, restores returned batch stock, and records a linked return. Udhaar return records carry a credit adjustment, and customer balance calculations cap that adjustment at the outstanding debt. These are source-level observations, not execution proof. Automated end-to-end assertions for the transaction paths are still outstanding. In particular, cash refund of a partially paid credit sale needs explicit accounting assertions to distinguish the amount refunded to the customer from the amount of outstanding debt reduced.
+- Never run destructive tests against the live store database or live Firebase Sync ID.
+- Test data exists only inside Playwright browser contexts and is discarded after each test.
+- No production `index.html` change is included in this QA work.
+- QA findings are not automatically fixed. Confirm business policy and review evidence before production changes.
+- PR #5 remains draft/unmerged until the QA suite and its limits are reviewed.
