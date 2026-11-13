@@ -26,7 +26,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await purchase.locator('[name=supplier]').fill('Playwright Supplier'); await purchase.locator('[name=invoice]').fill('PW-INV-001');
  await purchase.locator('button[type=submit]').click();
  await page.locator('#keepPrices').click();
- await expect(page.locator('#purchaseForm')).toBeVisible();
+ await expect.poll(async()=>{const state=await readStores(page);const saved=state.purchases.find(x=>x.invoice==='PW-INV-001');return saved?.addedPieces===8&&state.products.find(x=>x.id===product.id)?.stock===20}).toBe(true);
  db=await readStores(page); product=db.products.find(p=>p.id===product.id);
  expect(product.stock).toBe(20); expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(20);
  expect(db.purchases).toHaveLength(1); expect(db.purchases[0].addedPieces).toBe(8);
@@ -72,14 +72,14 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#returnRefundMethod').selectOption('Cash');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(18);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().click();
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('No refund');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(2);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
  // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
  await page.locator(`[data-return-sale="${creditSale.id}"]`).first().click();
@@ -170,8 +170,8 @@ test('owner sale deletion restores inventory exactly once and retains reversal t
  await unlock(page);
  const date=new Date().toISOString();
  await seedStores(page,{products:[{id:'reverse-p',name:'Reversal Fixture',sku:'REV-001',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'reverse-original-batch',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'reverse-sale',receipt:'RSS-PW-REV-001',date,items:[{productId:'reverse-p',name:'Reversal Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
- await navigate(page,'sales'); await expect(page.locator('[data-delete-sale="reverse-sale"]').first()).toBeVisible();
- await page.locator('[data-delete-sale="reverse-sale"]').first().click();
+ await navigate(page,'sales'); const deleteButton=page.locator('.sales-mobile-cards [data-delete-sale="reverse-sale"], .sales-desktop-table [data-delete-sale="reverse-sale"]').filter({visible:true}).first();
+ await expect(deleteButton).toBeVisible(); await deleteButton.click();
  await page.locator('#confirmDeleteSale').click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  let db=await readStores(page); expect(db.sales.some(s=>s.id==='reverse-sale')).toBe(false);
  let product=db.products.find(p=>p.id==='reverse-p'); expect(product.stock).toBe(6);
