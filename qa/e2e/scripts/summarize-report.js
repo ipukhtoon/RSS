@@ -30,7 +30,7 @@ const lines = [
   '- Total tests: ' + tests.length,
   '- Passed: ' + (counts.passed || 0),
   '- Failed: ' + (counts.failed || 0),
-  '- Expected failures: ' + (counts.expected || 0),
+  '- Expected failures: ' + (counts['expected failure'] || 0),
   '- Timed out: ' + (counts.timedOut || 0),
   '- Skipped: ' + (counts.skipped || 0),
   '', '| Test | Result | Duration |', '|---|---:|---:|'
