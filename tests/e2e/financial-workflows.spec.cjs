@@ -237,9 +237,9 @@ test('expiry-aware checkout sells only unexpired batch quantities',async({page})
  await seedStores(page,{products:[{id:'expiry-p',name:'Expiry Fixture',sku:'EXPIRY-001',saleMode:'piece',piecePriceEntered:true,price:10,packPrice:10,packSize:1,cost:4,stock:5,lowStock:1,batches:[{id:'expired-b',qty:2,costPerPiece:4,expiry:key(expired),receivedAt:date},{id:'valid-b',qty:3,costPerPiece:4,expiry:key(future),receivedAt:date}]}]});
  await navigate(page,'pos'); await page.locator('#posSearch').fill('Expiry Fixture');
  await page.locator('#posProducts [data-add-cart]').click();
- await page.locator('#cartItems [data-plus]').click(); await page.locator('#cartItems [data-plus]').click();
+ await page.locator('#posProducts [data-add-cart]').click(); await page.locator('#posProducts [data-add-cart]').click();
  await expect(page.locator('#cartCount')).toContainText('3 pieces');
- await page.locator('#cartItems [data-plus]').click();
+ await page.locator('#posProducts [data-add-cart]').click();
  await expect(page.locator('#toast')).toContainText('Only 3 non-expired piece(s) are available');
  await page.locator('#cashReceived').fill('30'); await page.locator('#completeSale').click(); await page.locator('#confirmSaleNow').click();
  await expect(page.locator('#receipt')).toBeVisible();
