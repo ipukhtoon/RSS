@@ -44,7 +44,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  // Credit customer and partial-payment Udhaar sale.
  await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
  await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
- await page.locator('#creditCustomerForm button[type=submit]').click();
+ await page.locator('#creditCustomerForm').evaluate(form=>form.requestSubmit());
  await expect(page.locator('#toast')).toContainText('Customer account created',{timeout:8000});
  await expect.poll(async()=> (await readStores(page)).customers.some(x=>x.name==='PW Audit Buyer')).toBe(true);
  await navigate(page,'credit'); await expect(page.locator('#creditCustomerList')).toContainText('PW Audit Buyer');
@@ -73,6 +73,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#returnRefundMethod').selectOption('Cash');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
+ expect(db.returns.find(r=>r.saleId===cashSale.id).items[0].productId).toBe(product.id);
  expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
