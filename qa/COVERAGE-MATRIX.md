@@ -9,7 +9,7 @@ This matrix separates browser execution from integrations that require dedicated
 | Purchases and restocking | Real purchase form submission with packs plus loose pieces; record, cost, supplier, stock and batch assertions | Purchase edit/reversal and every cost-warning branch remain |
 | Cash and other sales | Real cash checkout, sale snapshot, cash change, cost snapshot and stock depletion; underpayment blocked | Card, bank, wallet and split tender paths need separate cases |
 | Udhaar and partial payments | Real Borrow checkout with initial partial payment and subsequent repayment; overpayment boundary | Multiple old-debt allocation and excess payment edge cases remain |
-| Customer ledger | Customer balance arithmetic and repayment persistence through credit screen | WhatsApp export contents and complex multi-sale allocation need more cases |
+| Customer ledger | Customer balance arithmetic, repayment persistence, ledger sale/payment/return rows and ledger receipt action | WhatsApp export contents and complex multi-sale allocation need more cases |
 | Returns and stock restoration | Real return flow and repeated partial returns; cumulative quantity limit and batch restoration | Simultaneous multi-device return race requires Firebase-backed integration |
 | Udhaar returns | Real Borrow return with store credit; separate cash-refund-after-partial-payment scenario | Cash-refund amount versus debt adjustment needs explicit business-policy review |
 | Reports and profit | Net revenue, return-adjusted COGS, gross profit, inventory cost/retail value and older-sale return period policy | CSV export content and every date/calendar period remain |
