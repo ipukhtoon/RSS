@@ -96,7 +96,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  // Reports: exercise all-time period selector and assert report content renders.
  await navigate(page,'reports'); await page.locator('#reportPeriodTrigger').click();
  await page.locator('[data-report-period="alltime"]').click();
- await expect(page.locator('#main')).toContainText(/Gross sales|Gross revenue|Net sales/i);
+ await expect(page.locator('#main')).toContainText(/Net sales revenue/i);\n await page.locator('#expenseForm [name=description]').fill('PW Audit Electricity');\n await page.locator('#expenseForm [name=amount]').fill('125');\n await page.locator('#expenseForm [name=category]').fill('Utilities');\n await page.locator('#expenseForm button[type=submit]').click();\n db=await readStores(page); expect(db.expenses.some(e=>e.description==='PW Audit Electricity'&&e.amount===125)).toBeTruthy();
  // Data Health must render without mutating the fixture records.
  await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Data Health');
  const afterHealth=await readStores(page); expect(afterHealth.sales).toHaveLength(db.sales.length);
