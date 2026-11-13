@@ -179,3 +179,35 @@ test('Batch cost editor lists remaining batch quantity and current unit cost', a
   expect(saved.batches[0].qty).toBe(18);
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
+
+
+test('Owner can open every POS section without database or JavaScript errors', async ({ page }) => {
+  const uncaughtErrors = [];
+  page.on('pageerror', error => uncaughtErrors.push(error.message));
+
+  await unlockAsOwner(page);
+
+  const sections = [
+    ['dashboard', 'Dashboard'],
+    ['pos', 'New Sale'],
+    ['products', 'Products'],
+    ['purchases', 'Purchases / Restock'],
+    ['expiry', 'Expiry Management'],
+    ['dataHealth', 'Data Health'],
+    ['sales', 'Sales'],
+    ['returns', 'Returns'],
+    ['credit', 'Credit / Udhaar'],
+    ['reports', 'Reports'],
+    ['settings', 'Backup & Settings']
+  ];
+
+  for (const [id, label] of sections) {
+    await page.locator('#sideNav').locator('[data-view="' + id + '"]').click();
+    await expect(page.locator('#main')).not.toContainText('Could not load local database');
+    await expect(page.locator('#main')).not.toContainText('Could not start POS');
+    await expect(page.locator('#main')).not.toBeEmpty();
+    await expect(page.locator('#sideNav').locator('[data-view="' + id + '"]')).toHaveClass(/active/);
+  }
+
+  await expect.poll(() => uncaughtErrors).toEqual([]);
+});
