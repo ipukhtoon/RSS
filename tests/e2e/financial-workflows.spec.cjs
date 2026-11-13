@@ -74,7 +74,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
  expect(db.returns.find(r=>r.saleId===cashSale.id).items[0].productId).toBe(product.id);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
+ expect(db.products.find(p=>p.id===product.id).stock,JSON.stringify({product:db.products.find(p=>p.id===product.id),returnItem:db.returns.find(r=>r.saleId===cashSale.id)?.items?.[0]})).toBe(19);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
