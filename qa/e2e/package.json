@@ -1,0 +1,14 @@
+{
+  "name": "ronyal-pos-e2e-qa",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Isolated browser QA tests for Ronyal Super Store POS",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.55.0",
+    "http-server": "^14.1.1"
+  }
+}
