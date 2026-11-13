@@ -5,7 +5,7 @@ This branch contains an isolated browser QA environment for the Ronyal Super Sto
 ## Run locally or in GitHub Actions
 
 - Workflow: **Ronyal POS Automated QA**.
-- Trigger: push to `pos-automated-qa`, pull request to `main`, or manual workflow dispatch.
+- Trigger: pull-request updates targeting `main` or manual workflow dispatch. A shared concurrency group cancels stale QA runs when a newer revision arrives.
 - Runtime: Node 22 + Playwright Chromium.
 - Test app: local static server at `127.0.0.1:4173`.
 - Isolation: fresh Playwright browser contexts and a dedicated seeded IndexedDB database per test; service workers are blocked.
