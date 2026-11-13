@@ -32,6 +32,11 @@ function customerFixture(overrides = {}) {
     notes: 'Automated QA fixture', createdAt: new Date().toISOString(), ...overrides };
 }
 async function unlock(page, role = 'owner') {
+  await page.addLocatorHandler(page.locator('.app-dialog-backdrop'), async dialog => {
+    const input = dialog.locator('.app-dialog-input');
+    if (await input.count()) await input.fill('12');
+    await dialog.locator('.app-dialog-actions button').last().click();
+  });
   await page.goto('/');
   await expect(page.locator('#pinBackdrop')).toBeVisible();
   for (const digit of (role === 'cashier' ? '1234' : '9999')) {
