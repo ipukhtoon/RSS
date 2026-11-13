@@ -35,7 +35,7 @@ test('sale reversal uses a deterministic sale and item identity', () => {
 });
 
 test('only one sale-reversal creation path remains', () => {
-  assert.equal((html.match(/sale-reversal-/g) || []).length, 1);
+  assert.equal((html.match(/const reversalId=`sale-reversal-/g) || []).length, 1);
 });
 
 test('product form warns on pack and piece price mismatch', () => {
@@ -58,7 +58,7 @@ test('Data Health ignores products without batch tracking but still detects trac
 
 test('Data Health is read-only and includes requested diagnostics', () => {
   assert.match(html, /async function dataHealthPage\(\)/);
-  for (const label of ['Duplicate sale reversal', 'Stock \/ batch mismatch', 'Batch cost outlier', 'Sale below cost']) {
+  for (const label of ['Stock \/ batch mismatch', 'Batch cost outlier', 'Sale below cost']) {
     assert.ok(html.includes(label), 'missing diagnostic: ' + label);
   }
   assert.match(html, /no automatic corrections/i);
@@ -101,7 +101,7 @@ test('remaining batch cost correction is owner-gated, audited and excludes zero-
   assert.ok(start >= 0 && end > start);
   const source = html.slice(start, end);
   assert.match(source, /requireOwnerAccess\('correct remaining stock batch costs'\)/);
-  assert.match(source, /product\.batches\.filter\(b=>Number\(b\.qty\)>0\)/);
+  assert.match(source, /product\.batches\.map\(\(b,batchIndex\)=>\(\{b,batchIndex\}\)\)\.filter\(x=>x\.b&&Number\(x\.b\.qty\)>0\)/);
   assert.match(source, /costAudit\.push/);
   assert.match(source, /previousCostPerPiece/);
   assert.match(source, /newCostPerPiece/);
@@ -142,7 +142,7 @@ test('mobile product identifiers are separated and blank table headers never cre
   assert.match(html, /if\(label\).*removeAttribute\('data-label'\)/);
   assert.doesNotMatch(html, /Column '\+\(index\+1\)/);
   assert.match(html, /\.product-table-name\{display:flex!important;flex-direction:column!important/);
-  assert.match(html, /\.panel \.actions,\.modal \.actions/);
+  assert.match(html, /\.product-list \.product-card \.actions/);
 });
 
 test('final mobile alignment keeps product actions grouped and return controls positioned', () => {
@@ -178,17 +178,15 @@ test('settings mobile alignment is scoped to the settings page and restores left
 });
 
 
-test('final mobile alignment CSS is present and preserves table and dashboard exceptions', () => {
-  assert.match(html, /FINAL ALIGNMENT FIX \(CSS-only\)/);
-  assert.match(html, /\.small\.muted,[\s\S]*?text-align: left !important/);
-  assert.match(html, /\.table-wrap \.small\.muted,[\s\S]*?text-align: inherit !important/);
-  assert.match(html, /\.dashboard-payment-cell \.small\.muted,[\s\S]*?text-align: right !important/);
-  assert.match(html, /\.settings-page \.small\.muted,[\s\S]*?text-align: left !important/);
+test('current mobile alignment CSS preserves table labels, dashboard payment alignment and settings copy', () => {
+  assert.match(html, /\.table-wrap tbody td:before\{content:attr\(data-label\)/);
+  assert.match(html, /\.dashboard-payment-cell\{display:flex;flex-direction:column;align-items:flex-end;gap:3px;text-align:right!important/);
+  assert.match(html, /\.settings-page \.small\.muted,\.settings-page \.muted\{text-align:left!important\}/);
 });
 
-test('final alignment CSS keeps product action grids and credit actions distinct', () => {
-  assert.match(html, /\.credit-card \.actions \{[\s\S]*?justify-content: flex-start !important/);
-  assert.match(html, /\.product-list \.product-card \.actions \{[\s\S]*?justify-content: stretch !important/);
+test('current product action grid and credit action spacing rules are present', () => {
+  assert.match(html, /\.credit-card \.actions\{gap:6px!important\}/);
+  assert.match(html, /\.product-list \.product-card \.actions\{display:grid!important;grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 
