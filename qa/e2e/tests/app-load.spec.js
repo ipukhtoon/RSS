@@ -1,10 +1,11 @@
 const { test, expect } = require('@playwright/test');
 
 async function unlockAsOwner(page) {
-  await page.addInitScript(() => {
-    sessionStorage.setItem('ronyalUnlocked', 'true');
-    sessionStorage.setItem('ronyalRole', 'owner');
-  });
+  await expect(page.locator('#pinBackdrop')).toBeVisible();
+  for (const digit of '9999') {
+    await page.locator(`[data-pin-key="${digit}"]`).click();
+  }
+  await expect(page.locator('#pinBackdrop')).toHaveCount(0);
 }
 
 async function seedProduct(page) {
