@@ -14,7 +14,7 @@ function walk(suite, parents = []) {
     const result = item.results && item.results[item.results.length - 1] || {};
     tests.push({
       title: [...parents, spec.title].filter(Boolean).join(' › '),
-      status: result.status || item.status || 'unknown',
+      status: item.status || result.status || 'unknown',
       duration: result.duration || 0,
       error: result.error && (result.error.message || result.error.stack) || ''
     });
@@ -30,6 +30,7 @@ const lines = [
   '- Total tests: ' + tests.length,
   '- Passed: ' + (counts.passed || 0),
   '- Failed: ' + (counts.failed || 0),
+  '- Expected failures: ' + (counts.expected || 0),
   '- Timed out: ' + (counts.timedOut || 0),
   '- Skipped: ' + (counts.skipped || 0),
   '', '| Test | Result | Duration |', '|---|---:|---:|'
