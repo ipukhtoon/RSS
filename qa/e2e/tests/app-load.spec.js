@@ -308,3 +308,5 @@ test('Cashier can access sales work but owner-only sections redirect safely', as
 
   await expect.poll(() => uncaughtErrors).toEqual([]);
 });
+
+// QA suite revision: trigger the complete browser test suite on the current branch head.
