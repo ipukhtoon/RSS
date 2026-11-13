@@ -70,7 +70,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator(`[data-return-sale="${cashSale.id}"]`).first().click();
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('Cash');
- await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
+ await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
  expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
@@ -85,7 +85,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator(`[data-return-sale="${creditSale.id}"]`).first().click();
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('Cash');
- await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
+ await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); const creditReturn=db.returns.find(r=>r.saleId===creditSale.id);
  expect(creditReturn).toBeTruthy(); expect(creditReturn.creditAdjustment).toBe(20);
  expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
@@ -161,7 +161,7 @@ test('Data Health reconciliation and independent batch-cost correction persist e
  await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Batch cost outlier');
  await page.locator('[data-health-product="health-cost-p"][data-health-action="batch-costs"]').click();
  await page.locator('[data-batch-cost-index="0"]').fill('12.50');
- await page.locator('#saveBatchCosts').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
+ await page.locator('#saveBatchCosts').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); p=db.products.find(x=>x.id==='health-cost-p');
  expect(p.batches[0].costPerPiece).toBe(12.5); expect(p.batches[0].costAudit).toHaveLength(1);
 });
@@ -171,7 +171,7 @@ test('owner sale deletion restores inventory exactly once and retains reversal t
  await seedStores(page,{products:[{id:'reverse-p',name:'Reversal Fixture',sku:'REV-001',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'reverse-original-batch',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'reverse-sale',receipt:'RSS-PW-REV-001',date,items:[{productId:'reverse-p',name:'Reversal Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
  await navigate(page,'sales'); await expect(page.locator('[data-delete-sale="reverse-sale"]').first()).toBeVisible();
  await page.locator('[data-delete-sale="reverse-sale"]').first().click();
- await page.locator('#confirmDeleteSale').click(); await page.locator('#confirmDeleteSale').waitFor({state:'detached'});
+ await page.locator('#confirmDeleteSale').click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  let db=await readStores(page); expect(db.sales.some(s=>s.id==='reverse-sale')).toBe(false);
  let product=db.products.find(p=>p.id==='reverse-p'); expect(product.stock).toBe(6);
  expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(6);
