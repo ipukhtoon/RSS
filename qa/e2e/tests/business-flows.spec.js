@@ -122,7 +122,6 @@ test('Repayment greater than outstanding debt is rejected and no payment record 
 
 test('Udhaar return with store credit restores stock and reduces linked customer debt', async ({ page }) => {
   await unlock(page);
-  await acceptAppDialogs(page);
   const date = new Date().toISOString();
   await seed(page, {
     products: [productFixture({ stock: 9, batches: [{
@@ -165,7 +164,6 @@ test('Udhaar return with store credit restores stock and reduces linked customer
 
 test('Cash refund against a partially paid Udhaar sale persists the refund and debt adjustment separately', async ({ page }) => {
   await unlock(page);
-  await acceptAppDialogs(page);
   const date = new Date().toISOString();
   await seed(page, {
     products: [productFixture({ stock: 9, batches: [{
@@ -208,7 +206,6 @@ test('Cash refund against a partially paid Udhaar sale persists the refund and d
 
 test('Two partial returns cannot return more than the original sold quantity', async ({ page }) => {
   await unlock(page);
-  await acceptAppDialogs(page);
   const date = new Date().toISOString();
   await seed(page, {
     products: [productFixture({ stock: 8, batches: [{ id: 'qa-batch-001', qty: 8, costPerPiece: 90, expiry: '', receivedAt: date }] })],
