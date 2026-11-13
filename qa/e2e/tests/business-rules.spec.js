@@ -1,6 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const {
-  PRODUCT_ID, productFixture, unlock, seed, readRecord, go,
+  PRODUCT_ID, productFixture, unlock, resolveAppDialog, seed, readRecord, go,
   addFixtureProductToCart, confirmSale, closeReceipt
 } = require('./helpers');
 
