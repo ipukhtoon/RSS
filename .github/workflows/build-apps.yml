@@ -306,83 +306,19 @@ jobs:
 
           echo "Native plugins configured."
 
-      - name: Sync Capacitor and prepare signed release
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
-          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-          VERSION_CODE: ${{ github.run_number }}
-        shell: bash
+      - name: Sync Capacitor and build APK
         run: |
           set -euo pipefail
 
-          for name in ANDROID_KEYSTORE_BASE64 ANDROID_KEYSTORE_PASSWORD ANDROID_KEY_ALIAS ANDROID_KEY_PASSWORD; do
-            if [ -z "${!name:-}" ]; then
-              echo "ERROR: GitHub Actions secret $name is missing."
-              exit 1
-            fi
-          done
-
           npx cap sync android
-
-          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/ronyal-release.jks"
-          test -s "$RUNNER_TEMP/ronyal-release.jks"
-          cp "$RUNNER_TEMP/ronyal-release.jks" android/app/ronyal-release.jks
-
-          python - <<'PY'
-          from pathlib import Path
-          import os, re
-
-          gradle = Path("android/app/build.gradle")
-          text = gradle.read_text(encoding="utf-8")
-
-          version_code = int(os.environ["VERSION_CODE"])
-          text, count = re.subn(
-              r"(versionCode\s+)\d+",
-              lambda m: m.group(1) + str(version_code),
-              text,
-              count=1,
-          )
-          if count != 1:
-              raise SystemExit("ERROR: Could not safely set Android versionCode.")
-
-          signing = """
-              signingConfigs {
-                  release {
-                      storeFile file("ronyal-release.jks")
-                      storePassword System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                      keyAlias System.getenv("ANDROID_KEY_ALIAS")
-                      keyPassword System.getenv("ANDROID_KEY_PASSWORD")
-                  }
-              }
-          """
-          if "signingConfigs {" not in text:
-              text, count = re.subn(r"(?m)^\s*buildTypes\s*\{", signing + "\n            buildTypes {", text, count=1)
-              if count != 1:
-                  raise SystemExit("ERROR: Could not locate buildTypes in app/build.gradle.")
-
-          build_types = re.search(r"(?m)^\s*buildTypes\s*\{", text)
-          release_block = re.search(r"release\s*\{", text[build_types.end():]) if build_types else None
-          if not release_block:
-              raise SystemExit("ERROR: Could not locate release build type inside buildTypes.")
-          insert_at = build_types.end() + release_block.end()
-          text = text[:insert_at] + "\n            signingConfig signingConfigs.release" + text[insert_at:]
-
-          gradle.write_text(text, encoding="utf-8")
-          print(f"Configured persistent release signing; versionCode={version_code}.")
-          PY
 
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease
+          ./gradlew assembleDebug
 
-          cd ..
-          rm -f android/app/ronyal-release.jks "$RUNNER_TEMP/ronyal-release.jks"
-
-      - name: Upload signed Android APK
+      - name: Upload Android APK
         uses: actions/upload-artifact@v4
         with:
           name: Ronyal-Super-Store-Android-APK
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
           
