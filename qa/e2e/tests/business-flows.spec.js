@@ -23,6 +23,62 @@ test('Cash sale writes sale, exact change, sale-time unit cost and matching batc
   await closeReceipt(page);
 });
 
+
+test('Card, bank transfer, mobile wallet and split/other tender each complete and persist the selected method', async ({ page }) => {
+  await unlock(page);
+  const methods = ['Card', 'Bank transfer', 'Mobile wallet', 'Split / Other'];
+  const products = methods.map((method, index) => productFixture({
+    id: 'qa-tender-product-' + index,
+    sku: 'QA-TENDER-' + index,
+    barcode: '89000000010' + index,
+    name: 'QA Tender Product ' + index
+  }));
+  await seed(page, { products });
+  await go(page, 'pos');
+
+  for (let index = 0; index < methods.length; index++) {
+    const product = products[index];
+    await page.locator('#posSearch').fill(product.sku);
+    const add = page.locator('[data-add-cart="' + product.id + '"]');
+    await expect(add).toBeVisible();
+    await add.click();
+    await page.locator('#payment').selectOption(methods[index]);
+    await page.locator('#cashReceived').fill('120');
+    await confirmSale(page);
+    await closeReceipt(page);
+  }
+
+  const sales = await readStore(page, 'sales');
+  expect(sales).toHaveLength(4);
+  expect(sales.map(sale => sale.payment)).toEqual(methods);
+  expect(sales.every(sale => sale.total === 120)).toBe(true);
+  for (const product of products) {
+    const saved = await readRecord(page, 'products', product.id);
+    expect(saved.stock).toBe(9);
+    expect(saved.batches[0].qty).toBe(9);
+  }
+});
+
+test('Pack sale converts one pack into six stock pieces and snapshots per-piece batch cost', async ({ page }) => {
+  await unlock(page);
+  await seed(page, { products: [productFixture()] });
+  await go(page, 'pos');
+  await page.locator('#posSearch').fill('QA-SKU-001');
+  const packButton = page.locator('[data-add-pack="' + PRODUCT_ID + '"]');
+  await expect(packButton).toBeVisible();
+  await packButton.click();
+  await page.locator('#cashReceived').fill('700');
+  await confirmSale(page);
+
+  const sale = (await readStore(page, 'sales'))[0];
+  expect(sale.total).toBe(700);
+  expect(sale.items[0]).toMatchObject({ qty: 1, stockQty: 6, unitType: 'pack', price: 700, lineTotal: 700, unitCost: 90 });
+  const product = await readRecord(page, 'products', PRODUCT_ID);
+  expect(product.stock).toBe(4);
+  expect(product.batches[0].qty).toBe(4);
+  await closeReceipt(page);
+});
+
 test('Cash underpayment is blocked without saving a sale or reducing stock', async ({ page }) => {
   await unlock(page);
   await seed(page, { products: [productFixture()] });
