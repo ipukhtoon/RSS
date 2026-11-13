@@ -62,7 +62,15 @@ These are primarily startup, navigation, UI-contract, and non-mutating checks. T
 
 ## Execution status
 
-The original smoke test passed in GitHub Actions. A later run exposed a malformed test fixture (it seeded the wrong piece-price property); that fixture was corrected. The latest branch commits have not yet returned a GitHub Actions run result through the available GitHub status endpoint, so the expanded suite is **not yet verified green**. Do not treat newly added tests as passing until CI reports the result.
+The expanded browser suite completed successfully in GitHub Actions run 44 (commit `ec1c076d71830a5b78bf803248e4cf79c0da093c`): **8 passed, 0 failed**. The run completed on 2026-11-13 in 16.1 seconds.
+
+Earlier runs exposed two QA-test defects, not confirmed POS defects:
+- The seeded product's search-token fixture did not contain the trigrams required by the purchase search index. The fixture was corrected to generate the same word and trigram tokens as the application.
+- The cashier permission test expected an immediate redirect, but the application correctly presents an Owner Access Required PIN challenge. The test now verifies the challenge and cancels it before checking the safe return to Dashboard.
+
+The eight passing tests cover application startup, Products inventory display/search, product form cancellation, batch-cost editor display/cancel, owner navigation, purchase preview without writes, Credit/Udhaar and Returns screen controls, and cashier owner-access boundaries.
+
+**Important:** 8/8 passing does not mean the full requested POS audit is complete. Checkout persistence, purchase submission, partial payment allocation, customer ledger arithmetic, Udhaar return stock/refund behaviour, report calculations, Data Health reconciliation writes, Firebase multi-device/offline convergence, and physical printer output still need dedicated end-to-end or device tests.
 
 
 ## Financial and return audit status
