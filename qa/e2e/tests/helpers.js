@@ -116,7 +116,7 @@ async function readRecord(page, storeName, id) {
 async function go(page, view) {
   const labels = {
     dashboard: 'Dashboard', pos: 'New Sale', products: 'Products',
-    purchases: 'Purchases / Restock', expiry: 'Expiry Management',
+    purchases: 'Purchase & Restocking', expiry: 'Expiry Management',
     dataHealth: 'Data Health', sales: 'Sales history', returns: 'Returns',
     credit: 'Credit / Udhaar', reports: 'Reports', settings: 'Backup & Settings'
   };
