@@ -139,3 +139,35 @@ test('mobile navigation exposes secondary POS destinations through More',async({
  await page.locator('#mobileMoreMenu [data-view="returns"]').click();
  await expect(page.locator('#main')).toContainText('Returns');
 });
+test('Data Health reconciliation and independent batch-cost correction persist exact values',async({page})=>{
+ await unlock(page);
+ await seedStores(page,{products:[
+  {id:'health-stock-p',name:'Health Stock Mismatch',sku:'HEALTH-STOCK',saleMode:'piece',piecePriceEntered:true,price:30,packPrice:30,packSize:1,cost:10,stock:5,lowStock:1,batches:[{id:'health-stock-b',qty:3,costPerPiece:10,expiry:'',receivedAt:new Date().toISOString()}]},
+  {id:'health-cost-p',name:'Health Batch Cost',sku:'HEALTH-COST',saleMode:'piece',piecePriceEntered:true,price:30,packPrice:30,packSize:1,cost:10,stock:2,lowStock:1,batches:[{id:'health-cost-b',qty:2,costPerPiece:100,expiry:'',receivedAt:new Date().toISOString()}]}
+ ]});
+ await navigate(page,'dataHealth');
+ await expect(page.locator('#main')).toContainText('Stock / batch mismatch');
+ await page.locator('[data-health-product="health-stock-p"][data-health-action="reconcile-stock"]').click();
+ await expect(page.locator('.app-dialog-input')).toBeVisible(); await page.locator('.app-dialog-input').fill('5');
+ await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Continue'}).click(); await confirmAppDialog(page,true);
+ let db=await readStores(page); let p=db.products.find(x=>x.id==='health-stock-p');
+ expect(p.stock).toBe(5); expect(p.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
+ await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Batch cost outlier');
+ await page.locator('[data-health-product="health-cost-p"][data-health-action="batch-costs"]').click();
+ await page.locator('[data-batch-cost-index="0"]').fill('12.50');
+ await page.locator('#saveBatchCosts').click(); await confirmAppDialog(page,true);
+ db=await readStores(page); p=db.products.find(x=>x.id==='health-cost-p');
+ expect(p.batches[0].costPerPiece).toBe(12.5); expect(p.batches[0].costAudit).toHaveLength(1);
+});
+test('owner sale deletion restores inventory exactly once and retains reversal trace',async({page})=>{
+ await unlock(page);
+ const date=new Date().toISOString();
+ await seedStores(page,{products:[{id:'reverse-p',name:'Reversal Fixture',sku:'REV-001',saleMode:'piece',piecePriceEntered:true,price:50,packPrice:50,packSize:1,cost:20,stock:4,lowStock:1,batches:[{id:'reverse-original-batch',qty:4,costPerPiece:20,expiry:'',receivedAt:date}]}],sales:[{id:'reverse-sale',receipt:'RSS-PW-REV-001',date,items:[{productId:'reverse-p',name:'Reversal Fixture',qty:2,stockQty:2,unitType:'piece',packSize:1,price:50,lineTotal:100,unitCost:20}],subtotal:100,discount:0,total:100,payment:'Cash',status:'completed'}]});
+ await navigate(page,'sales'); await expect(page.locator('[data-delete-sale="reverse-sale"]')).toBeVisible();
+ await page.locator('[data-delete-sale="reverse-sale"]').click();
+ await page.locator('#confirmDeleteSale').click(); await confirmAppDialog(page,true);
+ let db=await readStores(page); expect(db.sales.some(s=>s.id==='reverse-sale')).toBe(false);
+ let product=db.products.find(p=>p.id==='reverse-p'); expect(product.stock).toBe(6);
+ expect(product.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(6);
+ expect(product.batches.filter(b=>String(b.id).startsWith('sale-reversal-reverse-sale-'))).toHaveLength(1);
+});
