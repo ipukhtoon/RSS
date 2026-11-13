@@ -9,7 +9,7 @@ async function unlock(page, pin='9999') {
 }
 async function navigate(page, view) {
  const nav=page.locator('#sideNav');
- if (await nav.locator(`[data-view="${view}"]`).count()) { await nav.locator(`[data-view="${view}"]`).click(); }
+ if (await nav.isVisible()) { await nav.locator(`[data-view="${view}"]`).click(); }
  else { await page.locator('#mobileMoreButton').click(); await page.locator(`#mobileMoreMenu [data-view="${view}"]`).click(); }
  await page.waitForTimeout(120);
 }
