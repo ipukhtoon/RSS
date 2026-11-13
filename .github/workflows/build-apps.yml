@@ -362,10 +362,11 @@ jobs:
               if count != 1:
                   raise SystemExit("ERROR: Could not locate buildTypes in app/build.gradle.")
 
-          release_block = re.search(r"release\s*\{", text)
+          build_types = re.search(r"(?m)^\s*buildTypes\s*\{", text)
+          release_block = re.search(r"release\s*\{", text[build_types.end():]) if build_types else None
           if not release_block:
-              raise SystemExit("ERROR: Could not locate release build type.")
-          insert_at = release_block.end()
+              raise SystemExit("ERROR: Could not locate release build type inside buildTypes.")
+          insert_at = build_types.end() + release_block.end()
           text = text[:insert_at] + "\n            signingConfig signingConfigs.release" + text[insert_at:]
 
           gradle.write_text(text, encoding="utf-8")
