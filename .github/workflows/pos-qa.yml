@@ -15,6 +15,10 @@ on:
       - 'qa/e2e/**'
       - '.github/workflows/pos-qa.yml'
 
+concurrency:
+  group: ronyal-pos-qa-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
