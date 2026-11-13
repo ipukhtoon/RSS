@@ -63,3 +63,8 @@ These are primarily startup, navigation, UI-contract, and non-mutating checks. T
 ## Execution status
 
 The original smoke test passed in GitHub Actions. A later run exposed a malformed test fixture (it seeded the wrong piece-price property); that fixture was corrected. The latest branch commits have not yet returned a GitHub Actions run result through the available GitHub status endpoint, so the expanded suite is **not yet verified green**. Do not treat newly added tests as passing until CI reports the result.
+
+
+## Financial and return audit status
+
+Static source inspection confirms the sale transaction writes product stock, sale record, and initial checkout repayment in one IndexedDB transaction. Return processing re-reads prior returns and product records inside a transaction, restores returned batch stock, and records a linked return. Udhaar return records carry a credit adjustment, and customer balance calculations cap that adjustment at the outstanding debt. These are source-level observations, not execution proof. Automated end-to-end assertions for the transaction paths are still outstanding. In particular, cash refund of a partially paid credit sale needs explicit accounting assertions to distinguish the amount refunded to the customer from the amount of outstanding debt reduced.
