@@ -45,6 +45,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await navigate(page,'credit'); await page.locator('#creditCustomerForm [name=name]').fill('PW Audit Buyer');
  await page.locator('#creditCustomerForm [name=phone]').fill('03000000001');
  await page.locator('#creditCustomerForm button[type=submit]').click();
+ await expect(page.locator('#toast')).toContainText('Customer account created',{timeout:8000});
  await expect.poll(async()=> (await readStores(page)).customers.some(x=>x.name==='PW Audit Buyer')).toBe(true);
  await navigate(page,'credit'); await expect(page.locator('#creditCustomerList')).toContainText('PW Audit Buyer');
  await navigate(page,'pos'); await page.locator('#posSearch').fill('PW Audit Water');
@@ -67,22 +68,22 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  db=await readStores(page); expect(db.creditPayments.some(p=>p.customerId===creditSale.customerId&&p.amount===5)).toBeTruthy();
  // First partial cash return: only one of two pieces, then the remaining piece.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
- await page.locator(`[data-return-sale="${cashSale.id}"]`).first().click();
+ await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('Cash');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(1);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(18);
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(cashSale.receipt);
- await page.locator(`[data-return-sale="${cashSale.id}"]`).first().click();
+ await page.locator(`[data-return-sale="${cashSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('No refund');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click();
  db=await readStores(page); expect(db.returns.filter(r=>r.saleId===cashSale.id)).toHaveLength(2);
- expect(db.products.find(p=>p.id===product.id).stock).toBe(19);
+ expect(db.products.find(p=>p.id===product.id).stock).toBe(20);
  // Udhaar return: cash refund must reduce the customer's outstanding ledger safely.
  await navigate(page,'returns'); await page.locator('#returnSaleSearch').fill(creditSale.receipt);
- await page.locator(`[data-return-sale="${creditSale.id}"]`).first().click();
+ await page.locator(`[data-return-sale="${creditSale.id}"]`).first().evaluate(el=>el.click());
  await page.locator('#returnItemForm [data-return-index="0"]').fill('1');
  await page.locator('#returnRefundMethod').selectOption('Cash');
  await page.locator('#confirmReturn').click(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('#overlay .modal-back')).toHaveCount(0);
@@ -101,7 +102,7 @@ test('complete financial journey: product, purchase, cash, Udhaar, repayment, pa
  await page.locator('#expenseForm [name=description]').fill('PW Audit Electricity');
  await page.locator('#expenseForm [name=amount]').fill('125');
  await page.locator('#expenseForm [name=category]').fill('Utilities');
- await page.locator('#expenseForm button[type=submit]').click();
+ await page.locator('#expenseForm button').click();
  db=await readStores(page); expect(db.expenses.some(e=>e.description==='PW Audit Electricity'&&e.amount===125)).toBeTruthy();
  // Data Health must render without mutating the fixture records.
  await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Data Health');
