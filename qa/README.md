@@ -21,7 +21,7 @@ The current suite includes real browser workflows and persisted-record assertion
 1. Products and inventory display/search, plus product form validation/cancel.
 2. FEFO batch cost valuation and stock depletion, expired-batch exclusion, duplicate-ID batch cost editing.
 3. Purchase submission with pack and loose-piece conversion, supplier/invoice, cost and batch-stock reconciliation.
-4. Cash checkout, sale-time cost snapshot, change, stock deduction and underpayment rejection.
+4. Cash, card, bank transfer, mobile wallet and split/other checkout; pack-to-piece stock conversion, sale-time cost snapshot, change, stock deduction and underpayment rejection.
 5. Udhaar checkout with initial partial payment, later repayment and overpayment guard.
 6. Customer balance arithmetic and customer isolation.
 7. Cash/store-credit returns, stock restoration, repeated partial returns and return quantity caps.
