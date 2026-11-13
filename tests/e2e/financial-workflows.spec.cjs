@@ -156,6 +156,7 @@ test('Data Health reconciliation and independent batch-cost correction persist e
  await page.locator('[data-health-product="health-stock-p"][data-health-action="reconcile-stock"]').click();
  await expect(page.locator('.app-dialog-input')).toBeVisible(); await page.locator('.app-dialog-input').fill('5');
  await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Continue'}).click();
+ await expect(page.locator('.app-dialog-backdrop')).toBeVisible(); await page.locator('.app-dialog-backdrop').getByRole('button',{name:'Confirm',exact:true}).click(); await expect(page.locator('.app-dialog-backdrop')).toHaveCount(0);
  let db=await readStores(page); let p=db.products.find(x=>x.id==='health-stock-p');
  expect(p.stock).toBe(5); expect(p.batches.reduce((n,b)=>n+Number(b.qty||0),0)).toBe(5);
  await navigate(page,'dataHealth'); await expect(page.locator('#main')).toContainText('Batch cost outlier');
