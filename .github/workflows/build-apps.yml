@@ -54,7 +54,7 @@ jobs:
 
       - name: Install Capacitor dependencies
         run: |
-          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7 @capacitor/app@7
+          npm install @capacitor/core@7 @capacitor/android@7 @capacitor/cli@7 @capacitor/app@7 @capacitor/splash-screen@7
           npm install @capacitor-mlkit/barcode-scanning@7
           npm install --no-save esbuild
           npm uninstall @capgo/capacitor-printer || true
@@ -94,6 +94,7 @@ jobs:
           cat > printer-bridge-entry.js <<'JS'
           import { registerPlugin } from '@capacitor/core';
           import { App } from '@capacitor/app';
+          import { SplashScreen } from '@capacitor/splash-screen';
           import {
             BarcodeScanner,
             BarcodeFormat
@@ -113,6 +114,10 @@ jobs:
               Native.saveFile(options),
             pickFile: (options = {}) =>
               Native.pickFile(options)
+          };
+
+          window.RonyalSplashScreen = {
+            hide: () => SplashScreen.hide()
           };
 
           window.RonyalApp = {
@@ -187,11 +192,51 @@ jobs:
             "webDir": "www",
             "android": {
               "allowMixedContent": true
+            },
+            "plugins": {
+              "SplashScreen": {
+                "launchAutoHide": false,
+                "launchFadeOutDuration": 0,
+                "backgroundColor": "#123c2f",
+                "androidScaleType": "CENTER_INSIDE",
+                "showSpinner": false
+              }
             }
           }
           JSON
 
           npx cap add android
+
+          # Keep the Android 12+ system splash green and use a safely inset logo.
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          styles = Path("android/app/src/main/res/values/styles.xml")
+          if not styles.is_file():
+              raise SystemExit("ERROR: Capacitor launch styles.xml was not generated.")
+
+          xml = styles.read_text(encoding="utf-8")
+          pattern = r'(<style\\b[^>]*name=["\\']AppTheme\\.NoActionBarLaunch["\\'][^>]*>)(.*?)(</style>)'
+          match = re.search(pattern, xml, flags=re.IGNORECASE | re.DOTALL)
+          if not match:
+              raise SystemExit("ERROR: Could not find AppTheme.NoActionBarLaunch in styles.xml.")
+
+          body = re.sub(
+              r'<item\\s+name=["\\']android:windowSplashScreen(?:Background|AnimatedIcon|AnimationDuration)["\\']\\s*>.*?</item>',
+              '',
+              match.group(2),
+              flags=re.IGNORECASE | re.DOTALL
+          )
+          body += """
+                  <item name="android:windowSplashScreenBackground">#123c2f</item>
+                  <item name="android:windowSplashScreenAnimatedIcon">@drawable/rss_splash_logo</item>
+                  <item name="android:windowSplashScreenAnimationDuration">0</item>
+          """
+          xml = xml[:match.start()] + match.group(1) + body + match.group(3) + xml[match.end():]
+          styles.write_text(xml, encoding="utf-8")
+          print("Android native splash theme configured.")
+          PY
 
       # Branding addition: Generate Android launcher icons
       - name: Apply Ronyal Super Store launcher icon
@@ -220,6 +265,24 @@ jobs:
           }
 
           res_dir = Path("android/app/src/main/res")
+
+          # Android 12+ applies an icon mask to the native splash. Give the
+          # logo transparent breathing room so its full artwork stays visible.
+          splash_dir = res_dir / "drawable"
+          splash_dir.mkdir(parents=True, exist_ok=True)
+          splash_canvas_size = 432
+          splash_logo = logo.copy()
+          splash_logo.thumbnail(
+              (int(splash_canvas_size * 0.60), int(splash_canvas_size * 0.60)),
+              Image.Resampling.LANCZOS
+          )
+          splash_canvas = Image.new("RGBA", (splash_canvas_size, splash_canvas_size), (0, 0, 0, 0))
+          splash_canvas.alpha_composite(
+              splash_logo,
+              ((splash_canvas_size - splash_logo.width) // 2,
+               (splash_canvas_size - splash_logo.height) // 2)
+          )
+          splash_canvas.save(splash_dir / "rss_splash_logo.png")
 
           for density, size in densities.items():
               folder = res_dir / f"mipmap-{density}"
