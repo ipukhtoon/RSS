@@ -193,46 +193,6 @@ jobs:
 
           npx cap add android
 
-      # Remove the Android OS launch-screen logo; keep the launcher icon and in-app branding.
-      - name: Disable native Android splash logo
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          python - <<'PY'
-          from pathlib import Path
-          import re
-
-          styles = Path("android/app/src/main/res/values/styles.xml")
-          if not styles.is_file():
-              raise SystemExit("ERROR: Android styles.xml was not generated.")
-
-          source = styles.read_text(encoding="utf-8")
-          launch = re.search(
-              r"(<style\s+name=['\"]AppTheme\.NoActionBarLaunch['\"][^>]*>)(.*?)(</style>)",
-              source,
-              re.S
-          )
-          if not launch:
-              raise SystemExit("ERROR: Native launch theme not found; stopping build.")
-
-          body = launch.group(2)
-          icon_item = re.compile(
-              r"<item\s+name=['\"]windowSplashScreenAnimatedIcon['\"]\s*>.*?</item>",
-              re.S
-          )
-          transparent_icon = '<item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>'
-          if icon_item.search(body):
-              body = icon_item.sub(transparent_icon, body, count=1)
-          else:
-              body += "\n        " + transparent_icon + "\n    "
-
-          source = source[:launch.start(2)] + body + source[launch.end(2):]
-          styles.write_text(source, encoding="utf-8")
-          print("Disabled the Android launch-screen logo.")
-          PY
-
-
       # Branding addition: Generate Android launcher icons
       - name: Apply Ronyal Super Store launcher icon
         shell: bash
