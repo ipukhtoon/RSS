@@ -1244,6 +1244,16 @@ async function printPosReceipt(jobName){
   const cap = window.Capacitor;
   const isNative = !!(cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform());
   if (isNative) {
+    // Android WebView's native print renderer can ignore the receipt logo's max-size
+    // constraints. Give the logo an explicit print box only in the APK; leave EXE
+    // and browser printing completely unchanged.
+    document.querySelectorAll('#overlay .receipt-brand-logo').forEach(img => {
+      img.style.setProperty('width', '18mm', 'important');
+      img.style.setProperty('height', '12mm', 'important');
+      img.style.setProperty('max-width', '18mm', 'important');
+      img.style.setProperty('max-height', '12mm', 'important');
+      img.style.setProperty('object-fit', 'contain', 'important');
+    });
     // The Android build exposes an app-native PrintManager bridge.
     const printer = window.RonyalPrinter;
     if (!printer || typeof printer.printWebView !== 'function') {
