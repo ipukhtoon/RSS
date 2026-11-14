@@ -756,9 +756,76 @@ const navItems=[['dashboard','▦','Dashboard'],['pos','▣','New Sale'],['produ
 const money=n=>'Rs '+Number(n||0).toLocaleString('en-PK',{minimumFractionDigits:2,maximumFractionDigits:2});const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function openDB(){return new Promise((resolve,reject)=>{let settled=false;const r=indexedDB.open(DB_NAME,DB_VERSION);const finish=(fn,value)=>{if(settled){if(fn===resolve&&value)value.close();return}settled=true;clearTimeout(timer);fn(value)};const timer=setTimeout(()=>finish(reject,new Error('Opening the local database took too long. Close any other Ronyal POS tabs, then reopen this page. Your saved data has not been deleted.')),10000);r.onupgradeneeded=()=>{const d=r.result;for(const [name,key] of [['products','id'],['sales','id'],['expenses','id'],['customers','id'],['suppliers','id'],['purchases','id'],['creditPayments','id'],['returns','id']])if(!d.objectStoreNames.contains(name))d.createObjectStore(name,{keyPath:key});const ensureIndex=(storeName,indexName,keyPath)=>{const os=r.transaction.objectStore(storeName);if(!os.indexNames.contains(indexName))os.createIndex(indexName,keyPath,{unique:false})};for(const [storeName,indexName,keyPath] of [['sales','byDate','date'],['expenses','byDate','date'],['purchases','byDate','date'],['returns','byDate','date'],['returns','bySaleId','saleId'],['creditPayments','byCustomerId','customerId'],['creditPayments','byDate','date']])ensureIndex(storeName,indexName,keyPath);for(const name of ['products','sales']){const os=r.transaction.objectStore(name);if(!os.indexNames.contains('searchTokens'))os.createIndex('searchTokens','searchTokens',{unique:false,multiEntry:true});const cursor=os.openCursor();cursor.onsuccess=()=>{const c=cursor.result;if(!c)return;const row=c.value;if(!Array.isArray(row.searchTokens)){row.searchTokens=makeSearchTokens(name,row);c.update(row)}c.continue()}}};r.onblocked=()=>finish(reject,new Error('The local database is blocked by another open Ronyal POS page. Close other tabs running this app, then reload. Do not clear browser storage.'));r.onsuccess=()=>{const d=r.result;d.onversionchange=()=>{d.close();const main=document.getElementById('main');if(main)main.innerHTML='<section class="panel"><h2>Database updated in another tab</h2><p>Close other Ronyal POS tabs and reload this page.</p></section>'};finish(resolve,d)};r.onerror=()=>finish(reject,r.error||new Error('Could not open the local database.'));});}
 function makeSearchTokens(name,row){const values=name==='products'?[row.name,row.barcode,row.pieceBarcode,row.sku,row.category]:[row.receipt,row.customerName,row.customerPhone,row.payment,row.id];const tokens=new Set();for(const value of values){const text=String(value??'').normalize('NFKC').toLocaleLowerCase().trim();if(!text)continue;const words=text.split(/[^\p{L}\p{N}]+/u).filter(Boolean);for(const word of words){tokens.add(word);if(word.length>=3)for(let i=0;i<=word.length-3;i++)tokens.add(word.slice(i,i+3))}}return [...tokens]}
+async function repairProductSearchTokens(){
+ const rows=await getAll('products'),repairs=[];
+ for(const row of rows){
+  const expected=makeSearchTokens('products',row);
+  const valid=Array.isArray(row.searchTokens)&&row.searchTokens.length===expected.length&&expected.every(token=>row.searchTokens.includes(token));
+  if(!valid)repairs.push({...row,searchTokens:expected});
+ }
+ if(!repairs.length)return 0;
+ await new Promise((resolve,reject)=>{
+  const tx=db.transaction('products','readwrite'),os=tx.objectStore('products');
+  for(const row of repairs)os.put(row);
+  tx.oncomplete=resolve;
+  tx.onerror=()=>reject(tx.error||new Error('Product search-index backfill failed.'));
+  tx.onabort=()=>reject(tx.error||new Error('Product search-index backfill was cancelled.'));
+ });
+ return repairs.length;
+}
 function store(name,mode='readonly'){return db.transaction(name,mode).objectStore(name)}function getAll(name){return new Promise((res,rej)=>{const r=store(name).getAll();r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)})}function getById(name,id){return new Promise((res,rej)=>{const r=store(name).get(id);r.onsuccess=()=>res(r.result||null);r.onerror=()=>rej(r.error)})}function getAllByIndex(name,indexName,value){return new Promise((res,rej)=>{let idx;try{idx=store(name).index(indexName)}catch(e){rej(e);return}const r=idx.getAll(IDBKeyRange.only(value));r.onsuccess=()=>res(r.result||[]);r.onerror=()=>rej(r.error)})}function getByIndexRange(name,indexName,range,limit=0,direction='next'){return new Promise((res,rej)=>{let idx;try{idx=store(name).index(indexName)}catch(e){rej(e);return}const out=[],r=idx.openCursor(range,direction);r.onsuccess=()=>{const c=r.result;if(!c){res(out);return}out.push(c.value);if(limit>0&&out.length>=limit){res(out);return}c.continue()};r.onerror=()=>rej(r.error)})}function countStore(name){return new Promise((res,rej)=>{const r=store(name).count();r.onsuccess=()=>res(r.result||0);r.onerror=()=>rej(r.error)})}function countLowStockProducts(){return new Promise((resolve,reject)=>{let count=0;const req=store('products').openCursor();req.onsuccess=()=>{const c=req.result;if(!c){resolve(count);return}const p=c.value;if(Number(p.stock)<=Number(p.lowStock??5))count++;c.continue()};req.onerror=()=>reject(req.error)})}
 function getCursorPage(name,limit=50,afterKey=null){return new Promise((resolve,reject)=>{const os=store(name),range=afterKey!==null?IDBKeyRange.lowerBound(afterKey,true):null,out=[],req=os.openCursor(range,'next');let hasMore=false;req.onsuccess=()=>{const c=req.result;if(!c){resolve({rows:out,lastKey:out.length?out[out.length-1].id:null,hasMore});return}if(out.length>=limit){hasMore=true;resolve({rows:out,lastKey:out.length?out[out.length-1].id:null,hasMore});return}out.push(c.value);c.continue()};req.onerror=()=>reject(req.error)})}
-async function searchIndexedRecords(name,query,limit=100){const terms=String(query||'').normalize('NFKC').toLocaleLowerCase().trim().split(/[^\p{L}\p{N}]+/u).filter(Boolean);if(!terms.length)return [];const idx=store(name).index('searchTokens');const candidates=await Promise.all(terms.map(async term=>{const grams=term.length>=3?Array.from({length:term.length-2},(_,i)=>term.slice(i,i+3)):[term];let rows=null;for(const gram of grams){const found=await new Promise((resolve,reject)=>{const out=[],range=term.length>=3?IDBKeyRange.only(gram):IDBKeyRange.bound(gram,gram+'\uffff'),req=idx.openCursor(range);req.onsuccess=()=>{const c=req.result;if(!c||out.length>=Math.max(1000,limit*12)){resolve(out);return}out.push(c.value);c.continue()};req.onerror=()=>reject(req.error)});if(rows===null)rows=found;else{const ids=new Set(found.map(x=>String(x.id)));rows=rows.filter(x=>ids.has(String(x.id)))}if(!rows.length)break}return rows||[]}));let rows=candidates[0]||[];for(let i=1;i<candidates.length;i++){const ids=new Set(candidates[i].map(x=>String(x.id)));rows=rows.filter(x=>ids.has(String(x.id)))}return rows.filter(x=>{const values=name==='products'?[x.name,x.barcode,x.pieceBarcode,x.sku,x.category]:[x.receipt,x.customerName,x.customerPhone,x.payment,x.id];const fields=values.map(v=>String(v??'').normalize('NFKC').toLocaleLowerCase());return terms.every(t=>fields.some(v=>v.includes(t)))}).slice(0,limit)}
+async function searchIndexedRecords(name,query,limit=100){
+ const terms=String(query||'').normalize('NFKC').toLocaleLowerCase().trim().split(/[^\\p{L}\\p{N}]+/u).filter(Boolean);
+ if(!terms.length)return [];
+ const matchesFields=row=>{
+  const values=name==='products'?[row.name,row.barcode,row.pieceBarcode,row.sku,row.category]:[row.receipt,row.customerName,row.customerPhone,row.payment,row.id];
+  const fields=values.map(v=>String(v??'').normalize('NFKC').toLocaleLowerCase());
+  return terms.every(term=>fields.some(value=>value.includes(term)));
+ };
+ const idx=store(name).index('searchTokens');
+ const candidates=await Promise.all(terms.map(async term=>{
+  const grams=term.length>=3?Array.from({length:term.length-2},(_,i)=>term.slice(i,i+3)):[term];
+  let rows=null;
+  for(const gram of grams){
+   const found=await new Promise((resolve,reject)=>{
+    const out=[],range=term.length>=3?IDBKeyRange.only(gram):IDBKeyRange.bound(gram,gram+'\\uffff'),req=idx.openCursor(range);
+    req.onsuccess=()=>{const c=req.result;if(!c||out.length>=Math.max(1000,limit*12)){resolve(out);return}out.push(c.value);c.continue()};
+    req.onerror=()=>reject(req.error);
+   });
+   if(rows===null)rows=found;else{const ids=new Set(found.map(x=>String(x.id)));rows=rows.filter(x=>ids.has(String(x.id)))}
+   if(!rows.length)break;
+  }
+  return rows||[];
+ }));
+ let indexed=candidates[0]||[];
+ for(let i=1;i<candidates.length;i++){const ids=new Set(candidates[i].map(x=>String(x.id)));indexed=indexed.filter(x=>ids.has(String(x.id)))}
+ const byId=new Map(indexed.filter(matchesFields).map(row=>[String(row.id),row]));
+ if(name==='products'){
+  // Safety net: inspect products whose derived token array is absent or stale.
+  // The normal search remains index-first; this fallback only checks records
+  // that are not correctly indexed, so old/cloud records remain discoverable.
+  const all=await getAll('products'),repairs=[];
+  for(const row of all){
+   const expected=makeSearchTokens('products',row);
+   const valid=Array.isArray(row.searchTokens)&&row.searchTokens.length===expected.length&&expected.every(token=>row.searchTokens.includes(token));
+   if(!valid){
+    if(matchesFields(row))byId.set(String(row.id),row);
+    repairs.push({...row,searchTokens:expected});
+   }
+  }
+  if(repairs.length){
+   try{await new Promise((resolve,reject)=>{
+    const tx=db.transaction('products','readwrite'),os=tx.objectStore('products');
+    for(const row of repairs)os.put(row);
+    tx.oncomplete=resolve;
+    tx.onerror=()=>reject(tx.error||new Error('Product search-index repair failed.'));
+    tx.onabort=()=>reject(tx.error||new Error('Product search-index repair was cancelled.'));
+   })}catch(error){console.warn('Product search-index repair could not be saved:',error)}
+  }
+ }
+ return Array.from(byId.values()).slice(0,limit);
+}
 let syncApplyingRemote=false;const POS_DEVICE_ID=localStorage.getItem('ronyalPosDeviceId')||(()=>{const x=uid();localStorage.setItem('ronyalPosDeviceId',x);return x})();
 function changeMeta(item){const now=new Date().toISOString(),old=item?._posSync||{};return {...old,updatedAt:now,revision:Math.max(0,Number(old.revision)||0)+1,deviceId:POS_DEVICE_ID,deleted:false}}
 function put(name,item){const record={...item};if(name==='products'||name==='sales')record.searchTokens=makeSearchTokens(name,record);if(!syncApplyingRemote)record._posSync=changeMeta(record);return new Promise((res,rej)=>{const r=store(name,'readwrite').put(record);r.onsuccess=()=>{if(!syncApplyingRemote)scheduleRecordSync(name,record);res(r.result)};r.onerror=()=>rej(r.error)})}
@@ -1945,7 +2012,7 @@ async function migrateUnbatchedProductStockToOpeningBatches(){
  return updates.length;
 }
 document.getElementById('lockPosButton')?.addEventListener('click',async()=>{clearLogin();view='dashboard';await render();await showPinLockScreen();if(isUnlocked())await render()});window.addEventListener('beforeunload',()=>{if(cameraStream)cameraStream.getTracks().forEach(t=>t.stop())});
-(async()=>{try{if(!('indexedDB'in window))throw new Error('This browser does not support IndexedDB');db=await openDB();await migrateUnbatchedProductStockToOpeningBatches();if(!window.isSecureContext&&location.hostname!=='localhost'&&location.protocol!=='file:')document.getElementById('connectionStatus').textContent='⚠ HTTPS needed for camera';const pinReady=showPinLockScreen(true);try{await window.RonyalSplashScreen?.hide?.()}catch(splashError){console.warn('Could not hide native splash screen:',splashError)}await pinReady;if(isUnlocked())await render()}catch(e){try{await window.RonyalSplashScreen?.hide?.()}catch(_){}const main=document.getElementById('main');if(main)main.innerHTML=`<div class="panel"><h2>Could not start POS</h2><p>${esc(e?.message||e)}</p><p>Your saved records have not been intentionally deleted. Close any other Ronyal POS tabs and reload this page. Do not clear browser storage or uninstall the browser.</p><div class="actions"><button type="button" onclick="location.reload()">Reload POS</button></div></div>`;console.error('POS startup error:',e)}})();
+(async()=>{try{if(!('indexedDB'in window))throw new Error('This browser does not support IndexedDB');db=await openDB();await repairProductSearchTokens();await migrateUnbatchedProductStockToOpeningBatches();if(!window.isSecureContext&&location.hostname!=='localhost'&&location.protocol!=='file:')document.getElementById('connectionStatus').textContent='⚠ HTTPS needed for camera';const pinReady=showPinLockScreen(true);try{await window.RonyalSplashScreen?.hide?.()}catch(splashError){console.warn('Could not hide native splash screen:',splashError)}await pinReady;if(isUnlocked())await render()}catch(e){try{await window.RonyalSplashScreen?.hide?.()}catch(_){}const main=document.getElementById('main');if(main)main.innerHTML=`<div class="panel"><h2>Could not start POS</h2><p>${esc(e?.message||e)}</p><p>Your saved records have not been intentionally deleted. Close any other Ronyal POS tabs and reload this page. Do not clear browser storage or uninstall the browser.</p><div class="actions"><button type="button" onclick="location.reload()">Reload POS</button></div></div>`;console.error('POS startup error:',e)}})();
 })();
 // Android/WebView Back-button support for POS dialogs and form popups.
 // A temporary history entry lets Android's normal WebView goBack() close a popup first.
