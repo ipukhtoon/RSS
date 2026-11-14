@@ -209,7 +209,7 @@ jobs:
 
           source = styles.read_text(encoding="utf-8")
           launch = re.search(
-              r'(<style\\s+name=["\\']AppTheme\\.NoActionBarLaunch["\\'][^>]*>)(.*?)(</style>)',
+              r"(<style\s+name=['\"]AppTheme\.NoActionBarLaunch['\"][^>]*>)(.*?)(</style>)",
               source,
               re.S
           )
@@ -218,14 +218,14 @@ jobs:
 
           body = launch.group(2)
           icon_item = re.compile(
-              r'<item\\s+name=["\\']windowSplashScreenAnimatedIcon["\\']\\s*>.*?</item>',
+              r"<item\s+name=['\"]windowSplashScreenAnimatedIcon['\"]\s*>.*?</item>",
               re.S
           )
           transparent_icon = '<item name="windowSplashScreenAnimatedIcon">@android:color/transparent</item>'
           if icon_item.search(body):
               body = icon_item.sub(transparent_icon, body, count=1)
           else:
-              body += "\\n        " + transparent_icon + "\\n    "
+              body += "\n        " + transparent_icon + "\n    "
 
           source = source[:launch.start(2)] + body + source[launch.end(2):]
           styles.write_text(source, encoding="utf-8")
