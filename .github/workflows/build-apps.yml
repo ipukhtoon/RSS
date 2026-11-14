@@ -217,14 +217,14 @@ jobs:
               raise SystemExit("ERROR: Capacitor launch styles.xml was not generated.")
 
           xml = styles.read_text(encoding="utf-8")
-          pattern = r'(<style\\b[^>]*name=["\\']AppTheme\\.NoActionBarLaunch["\\'][^>]*>)(.*?)(</style>)'
+          pattern = r"(<style\\b[^>]*name=['\"]AppTheme\\.NoActionBarLaunch['\"][^>]*>)(.*?)(</style>)"
           match = re.search(pattern, xml, flags=re.IGNORECASE | re.DOTALL)
           if not match:
               raise SystemExit("ERROR: Could not find AppTheme.NoActionBarLaunch in styles.xml.")
 
           body = re.sub(
-              r'<item\\s+name=["\\']android:windowSplashScreen(?:Background|AnimatedIcon|AnimationDuration)["\\']\\s*>.*?</item>',
-              '',
+              r"<item\\s+name=['\"]android:windowSplashScreen(?:Background|AnimatedIcon|AnimationDuration)['\"]\\s*>.*?</item>",
+              "",
               match.group(2),
               flags=re.IGNORECASE | re.DOTALL
           )
